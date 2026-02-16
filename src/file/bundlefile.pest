@@ -1,0 +1,16 @@
+file = { SOI ~ (element? ~ comment_newline)* ~ EOI }
+
+element = { source ~ string ~ ("," ~ comment_newline? ~ option)* }
+source  = { "winget" | "msstore" | "scoop" }
+string  = { "\"" ~ inner ~ "\"" }
+inner   = { (!("\"") ~ ANY)* }
+
+option  = { key ~ ":" ~ comment_newline? ~ value }
+key     = { (ASCII_ALPHA | "_")+ }
+value   = { string | boolean }
+boolean = { "true" | "false" }
+
+comment_newline = _{ COMMENT? ~ NEWLINE }
+COMMENT         = _{ "#" ~ (!NEWLINE ~ ANY)* }
+
+WHITESPACE = _{ " " | "\t" }
