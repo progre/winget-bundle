@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use pest::Parser;
 use pest::iterators::Pair;
+use std::fmt::Display;
 use std::str::FromStr;
 
 #[derive(pest_derive::Parser)]
@@ -27,7 +28,19 @@ pub struct PackageEntry {
     pub name: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize)]
+impl Display for PackageEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(name) = &self.name {
+            write!(f, "{name}")
+        } else {
+            write!(f, "{}", self.id)
+        }
+    }
+}
+
+#[derive(
+    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 pub enum Source {
     #[serde(rename = "winget")]
     Winget,

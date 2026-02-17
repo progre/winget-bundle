@@ -1,22 +1,18 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 use terminal_size::{Width, terminal_size};
 
 use super::load_files;
-use crate::command::save_lockfile;
+use crate::command::{exists_in_package_manager, save_lockfile};
 use crate::file::bundlefile::{Bundlefile, Source};
-use crate::file::lockfile::{self, PackageEntry};
+use crate::file::lockfile::{self, Lockfile, PackageEntry};
 use crate::winget;
 
 pub async fn cleanup(force: bool) -> Result<()> {
-    let (bundlefile, mut lockfile, lockfile_path) = load_files().await?;
-    let count = lockfile.packages.len();
-    let uninstall: Vec<_> = lockfile
-        .packages
-        .clone()
-        .into_iter()
-        .filter(|x| !exists(&bundlefile, x))
-        .collect();
+    let (bundlefile, lockfile, lockfile_path) = load_files().await?;
+    let uninstall: Vec<_> = uninstall_targets(&lockfile, &bundlefile);
     if uninstall.is_empty() {
         return Ok(());
     }
@@ -27,28 +23,52 @@ pub async fn cleanup(force: bool) -> Result<()> {
         return Ok(());
     }
 
-    for package in uninstall {
-        println!("Uninstalling {}...", package.id);
-        match uninstall_package(&package).await {
-            Ok(()) => {
-                let pos = lockfile
-                    .packages
-                    .iter()
-                    .position(|x| x.source == package.source && x.id == package.id)
-                    .unwrap();
-                lockfile.packages.swap_remove(pos);
-            }
-            Err(err) => eprintln!("\x1b[31m`winget-bundle` failed! {err}\x1b[0m"),
-        }
-    }
+    let mut packages: BTreeMap<(Source, String), PackageEntry> = lockfile
+        .packages
+        .iter()
+        .map(|x| ((x.source, x.id.clone()), x.clone()))
+        .collect();
+    let uninstalled = uninstall_all(uninstall, &mut packages).await?;
 
+    let packages = packages.into_values().collect();
+    if packages != lockfile.packages {
+        let lockfile = lockfile::Lockfile::new(packages);
+        save_lockfile(&lockfile, &lockfile_path).await?;
+    }
+    if uninstalled > 0 {
+        println!("Uninstalled {uninstalled} packages");
+    }
+    Ok(())
+}
+
+async fn uninstall_all(
+    uninstall: Vec<&PackageEntry>,
+    packages: &mut BTreeMap<(Source, String), PackageEntry>,
+) -> Result<u32> {
+    let mut uninstalled = 0;
+    for package in uninstall {
+        if exists_in_package_manager(package.source, &package.id).await? {
+            println!("Uninstalling {package}...");
+            if let Err(err) = uninstall_package(package).await {
+                eprintln!("\x1b[31m`winget-bundle` failed! {err}\x1b[0m");
+                continue;
+            }
+            uninstalled += 1;
+        }
+        let _ = packages.remove(&(package.source, package.id.clone()));
+    }
+    Ok(uninstalled)
+}
+
+fn uninstall_targets<'a>(
+    lockfile: &'a Lockfile,
+    bundlefile: &Bundlefile,
+) -> Vec<&'a lockfile::PackageEntry> {
     lockfile
         .packages
-        .sort_by(|a, b| a.source.cmp(&b.source).then_with(|| a.id.cmp(&b.id)));
-
-    save_lockfile(&lockfile, &lockfile_path).await?;
-    println!("Uninstalled {} packages", count - lockfile.packages.len());
-    Ok(())
+        .iter()
+        .filter(|x| !exists_in_bundlefile(bundlefile, x))
+        .collect()
 }
 
 fn print_grid<'a>(items: impl Iterator<Item = &'a str>) {
@@ -63,7 +83,7 @@ fn print_grid<'a>(items: impl Iterator<Item = &'a str>) {
     print!("{}", grid.fit_into_width(width as usize).unwrap())
 }
 
-fn exists(bundlefile: &Bundlefile, package: &PackageEntry) -> bool {
+fn exists_in_bundlefile(bundlefile: &Bundlefile, package: &PackageEntry) -> bool {
     bundlefile
         .entries
         .iter()
@@ -73,7 +93,7 @@ fn exists(bundlefile: &Bundlefile, package: &PackageEntry) -> bool {
 async fn uninstall_package(entry: &lockfile::PackageEntry) -> Result<()> {
     match entry.source {
         Source::Winget => {
-            winget::uninstall(&entry.id).await?;
+            winget::uninstall(winget::Source::Winget, &entry.id).await?;
             Ok(())
         }
         Source::MsStore => unimplemented!(),
