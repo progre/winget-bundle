@@ -2,7 +2,7 @@ mod cleanup;
 mod install;
 
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, io};
 
 use anyhow::{Result, bail};
@@ -45,7 +45,7 @@ fn locate_bundlefile() -> Result<PathBuf> {
     ))
 }
 
-async fn save_lockfile(lockfile: &Lockfile, lockfile_path: &PathBuf) -> io::Result<()> {
+async fn save_lockfile(lockfile: &Lockfile, lockfile_path: &Path) -> io::Result<()> {
     fs::write(&lockfile_path, lockfile.to_string()).await
 }
 

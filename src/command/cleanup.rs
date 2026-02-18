@@ -28,23 +28,7 @@ pub async fn cleanup(force: bool) -> Result<()> {
         .iter()
         .map(|x| ((x.source, x.id.clone()), x.clone()))
         .collect();
-    let uninstalled = uninstall_all(uninstall, &mut packages).await?;
 
-    let packages = packages.into_values().collect();
-    if packages != lockfile.packages {
-        let lockfile = lockfile::Lockfile::new(packages);
-        save_lockfile(&lockfile, &lockfile_path).await?;
-    }
-    if uninstalled > 0 {
-        println!("Uninstalled {uninstalled} packages");
-    }
-    Ok(())
-}
-
-async fn uninstall_all(
-    uninstall: Vec<&PackageEntry>,
-    packages: &mut BTreeMap<(Source, String), PackageEntry>,
-) -> Result<u32> {
     let mut uninstalled = 0;
     for package in uninstall {
         if exists_in_package_manager(package.source, &package.id).await? {
@@ -56,8 +40,14 @@ async fn uninstall_all(
             uninstalled += 1;
         }
         let _ = packages.remove(&(package.source, package.id.clone()));
+        let lockfile = lockfile::Lockfile::new(packages.clone().into_values().collect());
+        save_lockfile(&lockfile, &lockfile_path).await?;
     }
-    Ok(uninstalled)
+
+    if uninstalled > 0 {
+        println!("Uninstalled {uninstalled} packages");
+    }
+    Ok(())
 }
 
 fn uninstall_targets<'a>(

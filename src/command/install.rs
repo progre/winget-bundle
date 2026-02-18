@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use anyhow::Result;
 
@@ -15,25 +16,9 @@ pub async fn install() -> Result<()> {
         .iter()
         .map(|x| ((x.source, x.id.clone()), x.clone()))
         .collect();
-    let installed = install_all(bundlefile.entries, &mut packages).await?;
 
-    let packages = packages.into_values().collect();
-    if packages != lockfile.packages {
-        let lockfile = lockfile::Lockfile::new(packages);
-        save_lockfile(&lockfile, &lockfile_path).await?;
-    }
-    println!(
-        "\x1b[32m`winget-bundle` complete! {installed} Bundlefile dependencies now installed.\x1b[0m"
-    );
-    Ok(())
-}
-
-async fn install_all(
-    bundlefile_entries: Vec<bundlefile::PackageEntry>,
-    packages: &mut BTreeMap<(Source, String), PackageEntry>,
-) -> Result<u32> {
     let mut installed = 0;
-    for entry in bundlefile_entries {
+    for entry in bundlefile.entries {
         if exists_in_package_manager(entry.source, &entry.id).await? {
             println!("Using {entry}");
         } else {
@@ -43,10 +28,18 @@ async fn install_all(
                 continue;
             }
         }
-        let _ = packages.insert((entry.source, entry.id.clone()), to_lockfile_entry(entry));
+        if let Entry::Vacant(e) = packages.entry((entry.source, entry.id.clone())) {
+            e.insert(to_lockfile_entry(entry));
+            let lockfile = lockfile::Lockfile::new(packages.clone().into_values().collect());
+            save_lockfile(&lockfile, &lockfile_path).await?;
+        }
         installed += 1;
     }
-    Ok(installed)
+
+    println!(
+        "\x1b[32m`winget-bundle` complete! {installed} Bundlefile dependencies now installed.\x1b[0m"
+    );
+    Ok(())
 }
 
 fn to_lockfile_entry(entry: bundlefile::PackageEntry) -> lockfile::PackageEntry {
