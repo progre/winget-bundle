@@ -26,7 +26,15 @@ fn key(source: Source) -> &'static str {
 
 pub async fn install(source: Source, package: &str) -> anyhow::Result<()> {
     let status = Command::new("winget")
-        .args(["install", "--source", source.as_str(), key(source), package])
+        .args([
+            "install",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--source",
+            source.as_str(),
+            key(source),
+            package,
+        ])
         .status()
         .await?;
 
@@ -39,7 +47,14 @@ pub async fn install(source: Source, package: &str) -> anyhow::Result<()> {
 
 pub async fn exists(source: Source, package: &str) -> anyhow::Result<bool> {
     let status = Command::new("winget")
-        .args(["list", "--source", source.as_str(), key(source), package])
+        .args([
+            "list",
+            "--accept-source-agreements",
+            "--source",
+            source.as_str(),
+            key(source),
+            package,
+        ])
         .stdout(Stdio::null())
         .status()
         .await?;
@@ -51,6 +66,7 @@ pub async fn uninstall(source: Source, package: &str) -> anyhow::Result<()> {
     let status = Command::new("winget")
         .args([
             "uninstall",
+            "--accept-source-agreements",
             "--source",
             source.as_str(),
             key(source),
