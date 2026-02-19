@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashSet};
 
 use anyhow::Result;
 
-use crate::command::{exists_in_package_manager, load_files, save_lockfile};
+use crate::command::{load_files, save_lockfile};
 use crate::file::bundlefile::{self, Source};
 use crate::file::lockfile::{self, PackageEntry};
 use crate::winget;
@@ -17,9 +17,15 @@ pub async fn install() -> Result<()> {
         .map(|x| ((x.source, x.id.clone()), x.clone()))
         .collect();
 
+    let installed_packages = winget::list().await?;
+    let installed_packages = installed_packages
+        .iter()
+        .map(|x| (x.source.into(), &x.id))
+        .collect::<HashSet<_>>();
+
     let mut installed = 0;
     for entry in bundlefile.entries {
-        if exists_in_package_manager(entry.source, &entry.id).await? {
+        if installed_packages.contains(&(entry.source, &entry.id)) {
             println!("Using {entry}");
         } else {
             println!("\x1b[32mInstalling {entry}\x1b[0m");

@@ -4,6 +4,8 @@ use pest::iterators::Pair;
 use std::fmt::Display;
 use std::str::FromStr;
 
+use crate::winget;
+
 #[derive(pest_derive::Parser)]
 #[grammar = "file/bundlefile.pest"]
 struct BundlefileParser;
@@ -38,8 +40,18 @@ impl Display for PackageEntry {
     }
 }
 
+impl From<winget::PackageEntry> for PackageEntry {
+    fn from(value: winget::PackageEntry) -> Self {
+        Self {
+            source: value.source.into(),
+            id: value.id,
+            name: Some(value.name),
+        }
+    }
+}
+
 #[derive(
-    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
 pub enum Source {
     #[serde(rename = "winget")]
@@ -59,6 +71,15 @@ impl FromStr for Source {
             "msstore" => Ok(Source::MsStore),
             "scoop" => Ok(Source::Scoop),
             _ => bail!("Invalid command: {}", s),
+        }
+    }
+}
+
+impl From<winget::Source> for Source {
+    fn from(value: winget::Source) -> Self {
+        match value {
+            winget::Source::Winget => Source::Winget,
+            winget::Source::MsStore => Source::MsStore,
         }
     }
 }

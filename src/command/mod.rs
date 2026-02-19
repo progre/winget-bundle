@@ -8,9 +8,8 @@ use std::{env, io};
 use anyhow::{Result, bail};
 use smol::fs;
 
-use crate::file::bundlefile::{self, Bundlefile};
+use crate::file::bundlefile::Bundlefile;
 use crate::file::lockfile::Lockfile;
-use crate::winget;
 
 pub use cleanup::cleanup;
 pub use install::install;
@@ -47,12 +46,4 @@ fn locate_bundlefile() -> Result<PathBuf> {
 
 async fn save_lockfile(lockfile: &Lockfile, lockfile_path: &Path) -> io::Result<()> {
     fs::write(&lockfile_path, lockfile.to_string()).await
-}
-
-async fn exists_in_package_manager(source: bundlefile::Source, id: &str) -> Result<bool> {
-    match source {
-        bundlefile::Source::Winget => winget::exists(winget::Source::Winget, id).await,
-        bundlefile::Source::MsStore => winget::exists(winget::Source::MsStore, id).await,
-        bundlefile::Source::Scoop => unimplemented!(),
-    }
 }

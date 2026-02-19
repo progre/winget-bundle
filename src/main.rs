@@ -2,6 +2,7 @@ mod cli;
 mod command;
 mod file;
 mod winget;
+mod winget_list_parser;
 
 use anyhow::Result;
 use clap::Parser;

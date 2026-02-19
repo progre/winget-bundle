@@ -1,8 +1,19 @@
-use std::process::Stdio;
+use std::str::FromStr;
 
+use anyhow::bail;
 use smol::process::Command;
 
-#[derive(Clone, Copy)]
+use crate::winget_list_parser::parse_package_entries;
+
+#[derive(Clone)]
+pub struct PackageEntry {
+    pub source: Source,
+    pub id: String,
+    pub name: String,
+    pub _update_available: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Source {
     Winget,
     MsStore,
@@ -13,6 +24,18 @@ impl Source {
         match self {
             Self::Winget => "winget",
             Self::MsStore => "msstore",
+        }
+    }
+}
+
+impl FromStr for Source {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "winget" => Ok(Self::Winget),
+            "msstore" => Ok(Self::MsStore),
+            _ => bail!("Unknown source: {s}"),
         }
     }
 }
@@ -45,21 +68,17 @@ pub async fn install(source: Source, package: &str) -> anyhow::Result<()> {
     }
 }
 
-pub async fn exists(source: Source, package: &str) -> anyhow::Result<bool> {
-    let status = Command::new("winget")
-        .args([
-            "list",
-            "--accept-source-agreements",
-            "--source",
-            source.as_str(),
-            key(source),
-            package,
-        ])
-        .stdout(Stdio::null())
-        .status()
+pub async fn list() -> anyhow::Result<Vec<PackageEntry>> {
+    let output = Command::new("winget")
+        .args(["list", "--accept-source-agreements"])
+        .output()
         .await?;
-
-    Ok(status.success())
+    if !output.status.success() {
+        bail!("Failed to list packages");
+    }
+    Ok(parse_package_entries(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
 }
 
 pub async fn uninstall(source: Source, package: &str) -> anyhow::Result<()> {

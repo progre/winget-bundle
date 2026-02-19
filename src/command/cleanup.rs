@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use anyhow::Result;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 use terminal_size::{Width, terminal_size};
 
 use super::load_files;
-use crate::command::{exists_in_package_manager, save_lockfile};
+use crate::command::save_lockfile;
 use crate::file::bundlefile::{Bundlefile, Source};
 use crate::file::lockfile::{self, Lockfile, PackageEntry};
 use crate::winget;
@@ -29,9 +29,15 @@ pub async fn cleanup(force: bool) -> Result<()> {
         .map(|x| ((x.source, x.id.clone()), x.clone()))
         .collect();
 
+    let installed_packages = winget::list().await?;
+    let installed_packages = installed_packages
+        .iter()
+        .map(|x| (x.source.into(), &x.id))
+        .collect::<HashSet<_>>();
+
     let mut uninstalled = 0;
     for package in uninstall {
-        if exists_in_package_manager(package.source, &package.id).await? {
+        if installed_packages.contains(&(package.source, &package.id)) {
             println!("Uninstalling {package}...");
             if let Err(err) = uninstall_package(package).await {
                 eprintln!("\x1b[31m`winget-bundle` failed! {err}\x1b[0m");
