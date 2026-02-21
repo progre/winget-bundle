@@ -53,7 +53,7 @@ fn parse_line_to_entry(line: &str) -> Option<PackageEntry> {
         source,
         id: id_token.to_string(),
         name,
-        _update_available: update_available,
+        update_available,
     })
 }
 
@@ -125,7 +125,7 @@ MSYS2 64bit                                     MSYS2.MSYS2                     
         assert_eq!(entries[0].name, "PowerToys (Preview) x64".to_string());
         assert_eq!(entries[0].id, "Microsoft.PowerToys");
         assert_eq!(entries[0].source, Source::Winget);
-        assert!(entries[0]._update_available);
+        assert!(entries[0].update_available);
 
         assert_eq!(
             entries[1].name,
@@ -133,21 +133,21 @@ MSYS2 64bit                                     MSYS2.MSYS2                     
         );
         assert_eq!(entries[1].id, "Microsoft.VCRedist.2010.x64");
         assert_eq!(entries[1].source, Source::Winget);
-        assert!(!entries[1]._update_available);
+        assert!(!entries[1].update_available);
 
         assert_eq!(entries[2].name, "PowerShell".to_string());
         assert_eq!(entries[2].id, "9MZ1SNWT0N5D");
         assert_eq!(entries[2].source, Source::MsStore);
-        assert!(!entries[2]._update_available);
+        assert!(!entries[2].update_available);
 
         assert_eq!(entries[3].name, "Windows ターミナル".to_string());
         assert_eq!(entries[3].id, "Microsoft.WindowsTerminal");
         assert_eq!(entries[3].source, Source::Winget);
-        assert!(!entries[3]._update_available);
+        assert!(!entries[3].update_available);
 
         assert_eq!(entries[4].name, "MSYS2 64bit".to_string());
         assert_eq!(entries[4].id, "MSYS2.MSYS2");
         assert_eq!(entries[4].source, Source::Winget);
-        assert!(entries[4]._update_available);
+        assert!(entries[4].update_available);
     }
 }

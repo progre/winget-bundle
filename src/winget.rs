@@ -10,7 +10,7 @@ pub struct PackageEntry {
     pub source: Source,
     pub id: String,
     pub name: String,
-    pub _update_available: bool,
+    pub update_available: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -64,7 +64,28 @@ pub async fn install(source: Source, package: &str) -> anyhow::Result<()> {
     if status.success() {
         Ok(())
     } else {
-        Err(anyhow::anyhow!("Failed to fetch {}", package))
+        Err(anyhow::anyhow!("Failed to install {}", package))
+    }
+}
+
+pub async fn upgrade(source: Source, package: &str) -> anyhow::Result<()> {
+    let status = Command::new("winget")
+        .args([
+            "upgrade",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+            "--source",
+            source.as_str(),
+            key(source),
+            package,
+        ])
+        .status()
+        .await?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Failed to upgrade {}", package))
     }
 }
 
