@@ -1,112 +1,102 @@
-use crate::winget::{PackageEntry, Source};
+use std::num::NonZero;
 
-pub fn parse_package_entries(output: &str) -> Vec<PackageEntry> {
-    let mut entries = Vec::new();
+use anyhow::{Result, anyhow, bail};
+use unicode_width::UnicodeWidthChar;
 
-    let lines: Vec<&str> = output.lines().collect();
-    if lines.is_empty() {
-        return entries;
+use crate::winget::PackageEntry;
+
+pub fn parse_package_entries(output: &str) -> Result<Vec<PackageEntry>> {
+    let mut lines = output.lines();
+    let header = lines.next().ok_or_else(|| anyhow!("Invalid output"))?;
+    let header = header.split('\r').next_back();
+    let header = header.ok_or_else(|| anyhow!("Invalid output"))?;
+    let header = parse_header(header);
+    if &header[0].0 != "Name"
+        || &header[1].0 != "Id"
+        || &header[2].0 != "Version"
+        || &header[3].0 != "Available"
+        || &header[4].0 != "Source"
+    {
+        bail!("Invalid header");
     }
-
-    let start_idx = find_data_start(&lines);
-
-    for line in lines.into_iter().skip(start_idx) {
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        if let Some(entry) = parse_line_to_entry(line) {
-            entries.push(entry);
-        }
-    }
-
-    entries
-}
-
-fn find_data_start(lines: &[&str]) -> usize {
-    lines
-        .iter()
-        .position(|l| {
-            let t = l.trim();
-            !t.is_empty() && t.chars().all(|c| c == '-')
+    let header: Vec<_> = header.iter().map(|&(_, len)| len).collect();
+    lines.next().ok_or_else(|| anyhow!("Invalid output"))?;
+    let entries = lines
+        .map(|line| parse_entry(line, &header))
+        .map(|mut columns| {
+            let source = if columns.len() < 5 || columns[4].is_empty() {
+                None
+            } else {
+                Some(columns.pop().unwrap().parse()?)
+            };
+            let update_available = if columns.len() < 4 {
+                false
+            } else {
+                !columns.pop().unwrap().is_empty()
+            };
+            let _ = columns.pop().unwrap();
+            let id = columns.pop().unwrap();
+            let name = columns.pop().unwrap();
+            Ok(PackageEntry {
+                source,
+                id,
+                _name: name,
+                update_available,
+            })
         })
-        .map(|i| i + 1)
-        .unwrap_or(0)
+        .collect::<Result<_>>()?;
+    Ok(entries)
 }
 
-fn parse_line_to_entry(line: &str) -> Option<PackageEntry> {
-    let source_str = line.split_whitespace().last()?;
-    let source = source_str.parse::<Source>().ok()?;
-    let before_source = line.rfind(source_str).map(|i| &line[..i])?;
-
-    let toks: Vec<&str> = before_source.split_whitespace().collect();
-    let id_token = toks.iter().rev().find(|t| is_id_token(t)).copied()?;
-
-    let name = extract_name_from_line(line, before_source, id_token);
-
-    let id_pos = before_source.rfind(id_token).unwrap();
-    let after_id = &before_source[id_pos + id_token.len()..];
-    let after_tokens: Vec<&str> = after_id.split_whitespace().collect();
-    let update_available = after_tokens.len() >= 2;
-
-    Some(PackageEntry {
-        source,
-        id: id_token.to_string(),
-        name,
-        update_available,
-    })
-}
-
-fn is_version_like(tok: &str) -> bool {
-    let mut chars = tok.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_digit() => tok
-            .chars()
-            .all(|ch| ch.is_ascii_digit() || ch == '.' || ch == '…'),
-        Some('v') | Some('V') => {
-            let rest: String = chars.collect();
-            rest.chars()
-                .next()
-                .map(|ch| ch.is_ascii_digit())
-                .unwrap_or(false)
-                && rest
-                    .chars()
-                    .all(|ch| ch.is_ascii_digit() || ch == '.' || ch == '…')
+fn parse_header(text: &str) -> Vec<(String, Option<NonZero<usize>>)> {
+    let mut columns = Vec::new();
+    let mut start_idx = 0;
+    let mut column_name = None;
+    for (i, c) in text.chars().enumerate() {
+        match column_name.is_some() {
+            false => {
+                if !c.is_ascii_graphic() {
+                    column_name = Some(text.chars().skip(start_idx).take(i - start_idx).collect());
+                }
+            }
+            true => {
+                if c.is_ascii_graphic() {
+                    columns.push((column_name.take().unwrap(), NonZero::new(i - start_idx)));
+                    start_idx = i;
+                }
+            }
         }
-        _ => false,
     }
+    columns.push((text.chars().skip(start_idx).collect(), None));
+    columns
 }
 
-fn is_id_token(tok: &str) -> bool {
-    if is_version_like(tok) {
-        return false;
+fn parse_entry(line: &str, headers: &[Option<NonZero<usize>>]) -> Vec<String> {
+    let mut columns = Vec::new();
+    let mut column_idx = 0;
+    let mut count = 0;
+    let mut start_idx = 0;
+    for (i, c) in line.chars().enumerate() {
+        count += c.width().unwrap_or(1);
+        if let Some(column_len) = headers[column_idx]
+            && count >= column_len.get()
+        {
+            count = 0;
+            column_idx += 1;
+            let column_value: String = line.chars().skip(start_idx).take(i - start_idx).collect();
+            columns.push(column_value.trim().to_string());
+            start_idx = i;
+        }
     }
-
-    if tok.contains('\\') {
-        return true;
-    }
-
-    if tok.contains('.') && tok.chars().any(|c| c.is_alphabetic()) {
-        return true;
-    }
-
-    tokens_has_uppercase_alpha(tok)
-}
-
-fn tokens_has_uppercase_alpha(tok: &str) -> bool {
-    tok.chars().any(|c| c.is_ascii_uppercase())
-        && tok
-            .chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-}
-
-fn extract_name_from_line(line: &str, before_source: &str, id_token: &str) -> String {
-    let id_pos = before_source.rfind(id_token).unwrap();
-    line[..id_pos].trim_end().to_string()
+    let column_value: String = line.chars().skip(start_idx).collect();
+    columns.push(column_value.trim().to_string());
+    columns
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::winget::Source;
+
     use super::*;
 
     #[test]
@@ -121,33 +111,38 @@ Windows Notepad                                 MSIX\Microsoft.WindowsNotepad_11
 Windows ターミナル                              Microsoft.WindowsTerminal                 1.23.2021…            winget
 MSYS2 64bit                                     MSYS2.MSYS2                               20220603   20251213   winget
 ",
-        );
-        assert_eq!(entries[0].name, "PowerToys (Preview) x64".to_string());
+        ).unwrap();
+        assert_eq!(entries[0]._name, "PowerToys (Preview) x64".to_string());
         assert_eq!(entries[0].id, "Microsoft.PowerToys");
-        assert_eq!(entries[0].source, Source::Winget);
+        assert_eq!(entries[0].source, Some(Source::Winget));
         assert!(entries[0].update_available);
 
         assert_eq!(
-            entries[1].name,
+            entries[1]._name,
             "Microsoft Visual C++ 2010  x64 Redistributable…".to_string()
         );
         assert_eq!(entries[1].id, "Microsoft.VCRedist.2010.x64");
-        assert_eq!(entries[1].source, Source::Winget);
+        assert_eq!(entries[1].source, Some(Source::Winget));
         assert!(!entries[1].update_available);
 
-        assert_eq!(entries[2].name, "PowerShell".to_string());
+        assert_eq!(entries[2]._name, "PowerShell".to_string());
         assert_eq!(entries[2].id, "9MZ1SNWT0N5D");
-        assert_eq!(entries[2].source, Source::MsStore);
+        assert_eq!(entries[2].source, Some(Source::MsStore));
         assert!(!entries[2].update_available);
 
-        assert_eq!(entries[3].name, "Windows ターミナル".to_string());
-        assert_eq!(entries[3].id, "Microsoft.WindowsTerminal");
-        assert_eq!(entries[3].source, Source::Winget);
+        assert_eq!(entries[3]._name, "Windows Notepad".to_string());
+        assert_eq!(entries[3].id, r"MSIX\Microsoft.WindowsNotepad_11.2510.14…");
+        assert_eq!(entries[3].source, None);
         assert!(!entries[3].update_available);
 
-        assert_eq!(entries[4].name, "MSYS2 64bit".to_string());
-        assert_eq!(entries[4].id, "MSYS2.MSYS2");
-        assert_eq!(entries[4].source, Source::Winget);
-        assert!(entries[4].update_available);
+        assert_eq!(entries[4]._name, "Windows ターミナル".to_string());
+        assert_eq!(entries[4].id, "Microsoft.WindowsTerminal");
+        assert_eq!(entries[4].source, Some(Source::Winget));
+        assert!(!entries[4].update_available);
+
+        assert_eq!(entries[5]._name, "MSYS2 64bit".to_string());
+        assert_eq!(entries[5].id, "MSYS2.MSYS2");
+        assert_eq!(entries[5].source, Some(Source::Winget));
+        assert!(entries[5].update_available);
     }
 }

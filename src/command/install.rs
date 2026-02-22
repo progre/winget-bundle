@@ -76,13 +76,13 @@ fn list_packages(
 ) -> InstalledPackagesAndUpgradablePackages<'_> {
     let upgradable_packages = package_list
         .iter()
-        .filter(|x| upgrade && x.update_available)
-        .map(|x| (x.source.into(), x.id.as_str()))
+        .filter(|x| x.source.is_some() && upgrade && x.update_available)
+        .map(|x| (x.source.unwrap().into(), x.id.as_str()))
         .collect::<HashSet<_>>();
     let installed_packages = package_list
         .iter()
-        .filter(|x| !upgrade || !x.update_available)
-        .map(|x| (x.source.into(), x.id.as_str()))
+        .filter(|x| x.source.is_some() && !(upgrade && x.update_available))
+        .map(|x| (x.source.unwrap().into(), x.id.as_str()))
         .collect::<HashSet<_>>();
     (installed_packages, upgradable_packages)
 }

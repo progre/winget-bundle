@@ -7,9 +7,9 @@ use crate::winget_list_parser::parse_package_entries;
 
 #[derive(Clone)]
 pub struct PackageEntry {
-    pub source: Source,
+    pub source: Option<Source>,
     pub id: String,
-    pub name: String,
+    pub _name: String,
     pub update_available: bool,
 }
 
@@ -97,9 +97,7 @@ pub async fn list() -> anyhow::Result<Vec<PackageEntry>> {
     if !output.status.success() {
         bail!("Failed to list packages");
     }
-    Ok(parse_package_entries(&String::from_utf8_lossy(
-        &output.stdout,
-    )))
+    parse_package_entries(&String::from_utf8_lossy(&output.stdout))
 }
 
 pub async fn uninstall(source: Source, package: &str) -> anyhow::Result<()> {

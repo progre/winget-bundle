@@ -32,7 +32,8 @@ pub async fn cleanup(force: bool) -> Result<()> {
     let installed_packages = winget::list().await?;
     let installed_packages = installed_packages
         .iter()
-        .map(|x| (x.source.into(), &x.id))
+        .filter(|x| x.source.is_some())
+        .map(|x| (x.source.unwrap().into(), &x.id))
         .collect::<HashSet<_>>();
 
     let mut uninstalled = 0;

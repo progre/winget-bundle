@@ -40,16 +40,6 @@ impl Display for PackageEntry {
     }
 }
 
-impl From<winget::PackageEntry> for PackageEntry {
-    fn from(value: winget::PackageEntry) -> Self {
-        Self {
-            source: value.source.into(),
-            id: value.id,
-            name: Some(value.name),
-        }
-    }
-}
-
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
 )]
