@@ -7,9 +7,8 @@ mod winget_list_parser;
 use std::env;
 
 use anyhow::Result;
-use clap::Parser;
 
-use crate::cli::{Cli, Commands};
+use crate::cli::Commands;
 use crate::command::{cleanup, install};
 
 fn resolve_upgrade(no_upgrade: bool, upgrade: bool) -> bool {
@@ -25,8 +24,8 @@ fn resolve_upgrade(no_upgrade: bool, upgrade: bool) -> bool {
 
 fn main() -> Result<()> {
     smol::block_on(async {
-        let cli = Cli::parse();
-        match cli.command.unwrap_or_default() {
+        let cli = cli::parse_cli();
+        match cli.command {
             Commands::Install {
                 no_upgrade,
                 upgrade,

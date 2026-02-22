@@ -1,3 +1,5 @@
+use std::env;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -5,7 +7,7 @@ use clap::{Parser, Subcommand};
     name = "winget-bundle",
     version,
     about = "Install packages from the \x1b[1mBundlefile\x1b[0m.
-    
+
 This command finds the \x1b[1mBundlefile\x1b[0m using environment variables only:
 
 - If \x1b[1m$env:XDG_CONFIG_HOME\x1b[0m is set, use \x1b[1m$env:XDG_CONFIG_HOME/winget-bundle/Bundlefile\x1b[0m
@@ -13,7 +15,7 @@ This command finds the \x1b[1mBundlefile\x1b[0m using environment variables only
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Option<Commands>,
+    pub command: Commands,
 }
 
 #[derive(Debug, Subcommand)]
@@ -45,11 +47,19 @@ set."
     },
 }
 
-impl Default for Commands {
-    fn default() -> Self {
-        Self::Install {
-            no_upgrade: false,
-            upgrade: false,
-        }
+pub fn parse_cli() -> Cli {
+    let mut args: Vec<String> = env::args().collect();
+
+    if needs_default(&args) {
+        args.insert(1, "install".to_string());
     }
+
+    Cli::parse_from(args)
+}
+
+fn needs_default(args: &[String]) -> bool {
+    const ROOT_ARGS: [&str; 4] = ["-h", "--help", "-V", "--version"];
+    args.get(1)
+        .map(|x| !ROOT_ARGS.contains(&x.as_str()) && x.starts_with("-"))
+        .unwrap_or(true)
 }
