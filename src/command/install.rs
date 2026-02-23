@@ -78,7 +78,8 @@ fn list_packages<'a>(
 ) -> InstalledPackagesAndUpgradablePackages<'a> {
     let require_upgrade = |x: &winget::PackageEntry| {
         upgrade
-            && x.update_available
+            && x.version != "Unknown"
+            && x.available.is_some()
             && bundlefile
                 .iter()
                 .find(|y| y.id == x.id)

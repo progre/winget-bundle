@@ -10,7 +10,8 @@ pub struct PackageEntry {
     pub source: Option<Source>,
     pub id: String,
     pub _name: String,
-    pub update_available: bool,
+    pub version: String,
+    pub available: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -29,19 +29,20 @@ pub fn parse_package_entries(output: &str) -> Result<Vec<PackageEntry>> {
             } else {
                 Some(columns.pop().unwrap().parse()?)
             };
-            let update_available = if columns.len() < 4 {
-                false
+            let available = if columns.len() < 4 {
+                None
             } else {
-                !columns.pop().unwrap().is_empty()
+                Some(columns.pop().unwrap()).filter(|x| !x.is_empty())
             };
-            let _ = columns.pop().unwrap();
+            let version = columns.pop().unwrap();
             let id = columns.pop().unwrap();
             let name = columns.pop().unwrap();
             Ok(PackageEntry {
                 source,
                 id,
                 _name: name,
-                update_available,
+                version,
+                available,
             })
         })
         .collect::<Result<_>>()?;
@@ -115,7 +116,8 @@ MSYS2 64bit                                     MSYS2.MSYS2                     
         assert_eq!(entries[0]._name, "PowerToys (Preview) x64".to_string());
         assert_eq!(entries[0].id, "Microsoft.PowerToys");
         assert_eq!(entries[0].source, Some(Source::Winget));
-        assert!(entries[0].update_available);
+        assert_eq!(entries[0].version, "0.97.1");
+        assert_eq!(entries[0].available, Some("0.97.2".to_string()));
 
         assert_eq!(
             entries[1]._name,
@@ -123,26 +125,31 @@ MSYS2 64bit                                     MSYS2.MSYS2                     
         );
         assert_eq!(entries[1].id, "Microsoft.VCRedist.2010.x64");
         assert_eq!(entries[1].source, Some(Source::Winget));
-        assert!(!entries[1].update_available);
+        assert_eq!(entries[1].version, "10.0.40219");
+        assert_eq!(entries[1].available, None);
 
         assert_eq!(entries[2]._name, "PowerShell".to_string());
         assert_eq!(entries[2].id, "9MZ1SNWT0N5D");
         assert_eq!(entries[2].source, Some(Source::MsStore));
-        assert!(!entries[2].update_available);
+        assert_eq!(entries[2].version, "7.5.4.0");
+        assert_eq!(entries[2].available, None);
 
         assert_eq!(entries[3]._name, "Windows Notepad".to_string());
         assert_eq!(entries[3].id, r"MSIX\Microsoft.WindowsNotepad_11.2510.14…");
         assert_eq!(entries[3].source, None);
-        assert!(!entries[3].update_available);
+        assert_eq!(entries[3].version, "11.2510.1…");
+        assert_eq!(entries[3].available, None);
 
         assert_eq!(entries[4]._name, "Windows ターミナル".to_string());
         assert_eq!(entries[4].id, "Microsoft.WindowsTerminal");
         assert_eq!(entries[4].source, Some(Source::Winget));
-        assert!(!entries[4].update_available);
+        assert_eq!(entries[4].version, "1.23.2021…");
+        assert_eq!(entries[4].available, None);
 
         assert_eq!(entries[5]._name, "MSYS2 64bit".to_string());
         assert_eq!(entries[5].id, "MSYS2.MSYS2");
         assert_eq!(entries[5].source, Some(Source::Winget));
-        assert!(entries[5].update_available);
+        assert_eq!(entries[5].version, "20220603");
+        assert_eq!(entries[5].available, Some("20251213".to_string()));
     }
 }
