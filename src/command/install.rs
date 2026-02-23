@@ -17,7 +17,8 @@ pub async fn install(upgrade: bool) -> Result<()> {
         .collect();
 
     let package_list = winget::list().await?;
-    let (installed_packages, upgradable_packages) = list_packages(&package_list, upgrade);
+    let (installed_packages, upgradable_packages) =
+        list_packages(&package_list, &bundlefile.entries, upgrade);
 
     let mut installed = 0;
     for entry in bundlefile.entries {
@@ -70,18 +71,28 @@ type InstalledPackagesAndUpgradablePackages<'a> = (
     HashSet<(bundlefile::Source, &'a str)>,
 );
 
-fn list_packages(
-    package_list: &[winget::PackageEntry],
+fn list_packages<'a>(
+    package_list: &'a [winget::PackageEntry],
+    bundlefile: &[bundlefile::PackageEntry],
     upgrade: bool,
-) -> InstalledPackagesAndUpgradablePackages<'_> {
+) -> InstalledPackagesAndUpgradablePackages<'a> {
+    let require_upgrade = |x: &winget::PackageEntry| {
+        upgrade
+            && x.update_available
+            && bundlefile
+                .iter()
+                .find(|y| y.id == x.id)
+                .map(|y| !y.no_upgrade)
+                .unwrap_or(true)
+    };
     let upgradable_packages = package_list
         .iter()
-        .filter(|x| x.source.is_some() && upgrade && x.update_available)
+        .filter(|x| x.source.is_some() && require_upgrade(x))
         .map(|x| (x.source.unwrap().into(), x.id.as_str()))
         .collect::<HashSet<_>>();
     let installed_packages = package_list
         .iter()
-        .filter(|x| x.source.is_some() && !(upgrade && x.update_available))
+        .filter(|x| x.source.is_some() && !require_upgrade(x))
         .map(|x| (x.source.unwrap().into(), x.id.as_str()))
         .collect::<HashSet<_>>();
     (installed_packages, upgradable_packages)

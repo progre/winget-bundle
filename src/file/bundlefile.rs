@@ -28,6 +28,7 @@ pub struct PackageEntry {
     pub source: Source,
     pub id: String,
     pub name: Option<String>,
+    pub no_upgrade: bool,
 }
 
 impl Display for PackageEntry {
@@ -105,6 +106,7 @@ fn parse_element(element: Pair<'_, Rule>) -> Result<PackageEntry> {
     let id = id.into_inner().next().unwrap().as_str().to_string();
 
     let mut name = None;
+    let mut no_upgrade = false;
     for (key, value) in inner.map(parse_option) {
         match key.as_str() {
             "name" => {
@@ -113,6 +115,15 @@ fn parse_element(element: Pair<'_, Rule>) -> Result<PackageEntry> {
                 };
                 name = Some(n);
             }
+            "no_upgrade" => {
+                let Value::Bool(b) = value else {
+                    bail!(
+                        "Expected boolean value for 'no_upgrade' option, got {:?}",
+                        value,
+                    );
+                };
+                no_upgrade = b;
+            }
             _ => bail!("Unknown option: {}", key),
         }
     }
@@ -120,6 +131,7 @@ fn parse_element(element: Pair<'_, Rule>) -> Result<PackageEntry> {
         source: command,
         id,
         name,
+        no_upgrade,
     })
 }
 
