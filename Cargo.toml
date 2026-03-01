@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = { version = "1.0.102", features = ["backtrace"] }
 clap = { version = "4", features = ["derive"] }
+const_format = "0.2.35"
 futures = "0.3.32"
 itertools = "0.14.0"
 pest = "2.8.6"

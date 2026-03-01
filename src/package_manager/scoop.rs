@@ -1,6 +1,7 @@
 use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
+use const_format::formatcp;
 use futures::{future::try_join_all, try_join};
 use itertools::Itertools;
 use smol::process::Command;
@@ -12,6 +13,9 @@ use crate::{
 
 /// https://github.com/ScoopInstaller/Scoop/blob/5c896e901fafbe371b39673129120e3c88496a39/lib/depends.ps1#L103
 pub const INSTALLATION_HELPERS: [&str; 4] = ["7zip", "lessmsi", "innounp", "dark"];
+
+const SCOOP_PREFIX: &str =
+    "$Host.UI.RawUI.BufferSize = @{Width=65536; Height=$Host.UI.RawUI.BufferSize.Height}; scoop ";
 
 #[derive(Clone, Debug)]
 pub struct PackageEntry {
@@ -33,17 +37,17 @@ impl PackageEntry {
 }
 
 pub async fn install(name: &str) -> Result<()> {
-    exec_silent("update").await?;
+    exec_update_self().await?;
     exec(&["install", name]).await
 }
 
 pub async fn upgrade(name: &str) -> Result<()> {
-    exec_silent("update").await?;
+    exec_update_self().await?;
     exec(&["update", name]).await
 }
 
 pub async fn installed_packages() -> Result<Vec<PackageEntry>> {
-    exec_silent("update").await?;
+    exec_update_self().await?;
     let (list, status) = try_join!(list(), status())?;
     let iter = list
         .into_iter()
@@ -75,7 +79,7 @@ async fn list() -> Result<Vec<[String; 5]>> {
     const LEN: usize = 5;
     const COLS: [&str; LEN] = ["Name", "Version", "Source", "Updated", "Info"];
     if column_count != LEN || list_cells.len() % column_count != 0 || list_cells[0..LEN] != COLS {
-        bail!("Invalid header");
+        bail!("Invalid header: {output}");
     }
     let list = list_cells
         .into_iter()
@@ -101,7 +105,7 @@ async fn status() -> Result<Vec<[String; 5]>> {
     ];
     if column_count != LEN || status_cells.len() % column_count != 0 || status_cells[..LEN] != COLS
     {
-        bail!("Invalid header");
+        bail!("Invalid header: {output}");
     }
     let status = status_cells
         .into_iter()
@@ -121,7 +125,7 @@ async fn depends(name: &str) -> Result<Vec<[String; 2]>> {
     const COLS: [&str; LEN] = ["Source", "Name"];
     if column_count != LEN || status_cells.len() % column_count != 0 || status_cells[..LEN] != COLS
     {
-        bail!("Invalid header");
+        bail!("Invalid header: {output}");
     }
     let status = status_cells
         .into_iter()
@@ -139,7 +143,7 @@ pub async fn uninstall(name: &str) -> Result<()> {
 }
 
 async fn exec(args: &[&str]) -> Result<()> {
-    let cmd = format!("scoop {}", args.join(" "));
+    let cmd = format!("{SCOOP_PREFIX}{}", args.join(" "));
     let status = Command::new("powershell.exe")
         .args(["-NonInteractive", "-NoProfile", "-Command", &cmd])
         .env("PSModulePath", "")
@@ -151,10 +155,13 @@ async fn exec(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+async fn exec_update_self() -> Result<()> {
+    exec_silent(formatcp!("{SCOOP_PREFIX}update")).await
+}
+
 async fn exec_silent(cmd: &str) -> Result<()> {
-    let cmd = format!("scoop {}", cmd);
     let status = Command::new("powershell.exe")
-        .args(["-NonInteractive", "-NoProfile", "-Command", &cmd])
+        .args(["-NonInteractive", "-NoProfile", "-Command", cmd])
         .env("PSModulePath", "")
         .stdout(Stdio::null())
         .status()
@@ -166,7 +173,7 @@ async fn exec_silent(cmd: &str) -> Result<()> {
 }
 
 async fn exec_output(args: &[&str]) -> Result<String> {
-    let cmd = format!("scoop {}", args.join(" "));
+    let cmd = format!("{SCOOP_PREFIX}{}", args.join(" "));
     let output = Command::new("powershell.exe")
         .args(["-NonInteractive", "-NoProfile", "-Command", &cmd])
         .env("PSModulePath", "")

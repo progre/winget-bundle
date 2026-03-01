@@ -130,7 +130,7 @@ pub async fn list() -> anyhow::Result<Vec<PackageEntry>> {
     let (column_len, cells) =
         parse_table(lines, ColumnWidthBasis::Header).context("Failed to parse winget list")?;
     if column_len != 5 || cells[..5] != ["Name", "Id", "Version", "Available", "Source"] {
-        bail!("Invalid header");
+        bail!("Invalid header: {first_line:?}");
     }
     Ok(cells
         .into_iter()
