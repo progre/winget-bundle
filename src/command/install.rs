@@ -6,7 +6,7 @@ use anyhow::Result;
 use crate::command::{load_files, save_lockfile};
 use crate::file::bundlefile::{self, Source};
 use crate::file::lockfile::{self, PackageEntry};
-use crate::winget;
+use crate::package_manager::{scoop, winget};
 
 pub async fn install(upgrade: bool) -> Result<()> {
     let (bundlefile, lockfile, lockfile_path) = load_files().await?;
@@ -16,9 +16,14 @@ pub async fn install(upgrade: bool) -> Result<()> {
         .map(|x| ((x.source, x.id.clone()), x.clone()))
         .collect();
 
-    let package_list = winget::list().await?;
-    let (installed_packages, upgradable_packages) =
-        list_packages(&package_list, &bundlefile.entries, upgrade);
+    let winget_package_list = winget::list().await?;
+    let scoop_package_list = scoop::installed_packages().await?;
+    let (installed_packages, upgradable_packages) = list_packages(
+        &winget_package_list,
+        &scoop_package_list,
+        &bundlefile.entries,
+        upgrade,
+    );
 
     let mut installed = 0;
     for entry in bundlefile.entries {
@@ -72,30 +77,47 @@ type InstalledPackagesAndUpgradablePackages<'a> = (
 );
 
 fn list_packages<'a>(
-    package_list: &'a [winget::PackageEntry],
+    winget_package_list: &'a [winget::PackageEntry],
+    scoop_package_list: &'a [scoop::PackageEntry],
     bundlefile: &[bundlefile::PackageEntry],
     upgrade: bool,
 ) -> InstalledPackagesAndUpgradablePackages<'a> {
-    let require_upgrade = |x: &winget::PackageEntry| {
-        upgrade
-            && x.version != "Unknown"
-            && x.available.is_some()
-            && bundlefile
-                .iter()
-                .find(|y| y.id == x.id)
-                .map(|y| !y.no_upgrade)
-                .unwrap_or(true)
+    let winget_package_list = winget_package_list.iter().filter(|x| x.source.is_some());
+    let has_no_upgrade = |bundlefile: &[bundlefile::PackageEntry], key: &str| {
+        bundlefile
+            .iter()
+            .find(|y| y.id == key)
+            .map(|y| !y.no_upgrade)
+            .unwrap_or(true)
     };
-    let upgradable_packages = package_list
+
+    let require_upgrade = |x: &winget::PackageEntry| {
+        upgrade && x.is_upgradable() && has_no_upgrade(bundlefile, &x.id)
+    };
+    let upgradable_packages = winget_package_list
+        .clone()
+        .filter(|x| require_upgrade(x))
+        .map(|x| x.to_bundlefile_key().unwrap());
+    let installed_packages = winget_package_list
+        .filter(|x| !require_upgrade(x))
+        .map(|x| x.to_bundlefile_key().unwrap());
+
+    let require_upgrade = |x: &scoop::PackageEntry| {
+        upgrade && x.is_upgradable() && has_no_upgrade(bundlefile, &x.name)
+    };
+    let upgradable_packages = scoop_package_list
         .iter()
-        .filter(|x| x.source.is_some() && require_upgrade(x))
-        .map(|x| (x.source.unwrap().into(), x.id.as_str()))
+        .filter(|x| require_upgrade(x))
+        .map(|x| x.to_bundlefile_key())
+        .chain(upgradable_packages)
         .collect::<HashSet<_>>();
-    let installed_packages = package_list
+    let installed_packages = scoop_package_list
         .iter()
-        .filter(|x| x.source.is_some() && !require_upgrade(x))
-        .map(|x| (x.source.unwrap().into(), x.id.as_str()))
+        .filter(|x| !require_upgrade(x))
+        .map(|x| x.to_bundlefile_key())
+        .chain(installed_packages)
         .collect::<HashSet<_>>();
+
     (installed_packages, upgradable_packages)
 }
 
@@ -103,7 +125,7 @@ async fn install_package(entry: &bundlefile::PackageEntry) -> Result<()> {
     match entry.source {
         Source::Winget => winget::install(winget::Source::Winget, &entry.id).await,
         Source::MsStore => winget::install(winget::Source::MsStore, &entry.id).await,
-        Source::Scoop => unimplemented!(),
+        Source::Scoop => scoop::install(&entry.id).await,
     }
 }
 
@@ -111,6 +133,6 @@ async fn upgrade_package(entry: &bundlefile::PackageEntry) -> Result<()> {
     match entry.source {
         Source::Winget => winget::upgrade(winget::Source::Winget, &entry.id).await,
         Source::MsStore => winget::upgrade(winget::Source::MsStore, &entry.id).await,
-        Source::Scoop => unimplemented!(),
+        Source::Scoop => scoop::upgrade(&entry.id).await,
     }
 }

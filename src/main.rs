@@ -1,8 +1,7 @@
 mod cli;
 mod command;
 mod file;
-mod winget;
-mod winget_list_parser;
+mod package_manager;
 
 use std::env;
 

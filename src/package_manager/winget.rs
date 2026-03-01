@@ -1,17 +1,31 @@
-use std::str::FromStr;
+use std::{ops::Not, str::FromStr};
 
-use anyhow::bail;
+use anyhow::{Context, bail};
+use itertools::Itertools;
 use smol::process::Command;
 
-use crate::winget_list_parser::parse_package_entries;
+use crate::{
+    file::bundlefile,
+    package_manager::table_parser::{ColumnWidthBasis, parse_table},
+};
 
 #[derive(Clone)]
 pub struct PackageEntry {
     pub source: Option<Source>,
     pub id: String,
     pub _name: String,
-    pub version: String,
-    pub available: Option<String>,
+    version: String,
+    available: Option<String>,
+}
+
+impl PackageEntry {
+    pub fn is_upgradable(&self) -> bool {
+        self.version != "Unknown" && self.available.is_some()
+    }
+
+    pub fn to_bundlefile_key(&self) -> Option<(bundlefile::Source, &str)> {
+        self.source.map(|source| (source.into(), self.id.as_str()))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -98,7 +112,37 @@ pub async fn list() -> anyhow::Result<Vec<PackageEntry>> {
     if !output.status.success() {
         bail!("Failed to list packages");
     }
-    parse_package_entries(&String::from_utf8_lossy(&output.stdout))
+    let output = String::from_utf8_lossy(&output.stdout);
+    let mut output = output.lines();
+    let first_line = output.next();
+    let first_line = first_line.and_then(|x| x.split('\r').next_back());
+    let lines = first_line.into_iter().chain(output);
+    let (column_len, cells) =
+        parse_table(lines, ColumnWidthBasis::Header).context("Failed to parse winget list")?;
+    if column_len != 5 || cells[..5] != ["Name", "Id", "Version", "Available", "Source"] {
+        bail!("Invalid header");
+    }
+    Ok(cells
+        .into_iter()
+        .skip(column_len)
+        .chunks(column_len)
+        .into_iter()
+        .map(|mut columns| {
+            let name = columns.next().unwrap();
+            let id = columns.next().unwrap();
+            let version = columns.next().unwrap();
+            let available = columns.next().unwrap();
+            let available = available.is_empty().not().then_some(available);
+            let source = columns.next().unwrap().parse().ok();
+            PackageEntry {
+                source,
+                id,
+                _name: name,
+                version,
+                available,
+            }
+        })
+        .collect())
 }
 
 pub async fn uninstall(source: Source, package: &str) -> anyhow::Result<()> {

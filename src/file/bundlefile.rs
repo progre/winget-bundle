@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::winget;
+use crate::package_manager::winget;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "file/bundlefile.pest"]

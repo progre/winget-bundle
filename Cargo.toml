@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.101"
+anyhow = { version = "1.0.102", features = ["backtrace"] }
+clap = { version = "4", features = ["derive"] }
+itertools = "0.14.0"
 pest = "2.8.6"
 pest_derive = "2.8.6"
-clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
-toml = "0.9.8"
 smol = "2.0.2"
-term_grid = "0.2.0"
 terminal_size = "0.4.3"
+toml = "1.0.3"
 unicode-width = "0.2.2"
+uutils_term_grid = "0.7.0"
