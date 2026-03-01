@@ -26,8 +26,8 @@ impl PackageEntry {
         self.latest_version.is_some()
     }
 
-    pub fn to_bundlefile_key(&self) -> (bundlefile::Source, &str) {
-        (bundlefile::Source::Scoop, self.name.as_str())
+    pub fn as_bundlefile_key(&self) -> bundlefile::CompositeKey<'_> {
+        bundlefile::CompositeKey::new(bundlefile::Source::Scoop, self.name.as_str())
     }
 }
 

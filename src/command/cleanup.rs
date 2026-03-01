@@ -7,8 +7,8 @@ use terminal_size::{Width, terminal_size};
 
 use super::load_files;
 use crate::command::save_lockfile;
-use crate::file::bundlefile::{self, Bundlefile, Source};
-use crate::file::lockfile::{self, Lockfile, PackageEntry};
+use crate::file::bundlefile::{self, Bundlefile};
+use crate::file::lockfile::{self, Lockfile};
 use crate::package_manager::{scoop, winget};
 
 pub async fn cleanup(force: bool) -> Result<()> {
@@ -29,7 +29,7 @@ pub async fn cleanup(force: bool) -> Result<()> {
         return Ok(());
     }
 
-    let mut uninstalled = cleanup_winget(&lockfile_targets, &lockfile, &lockfile_path).await?;
+    let mut uninstalled = cleanup_lockfile(&lockfile_targets, &lockfile, &lockfile_path).await?;
     uninstalled += cleanup_scoop(&scoop_targets).await?;
 
     if uninstalled > 0 {
@@ -38,12 +38,12 @@ pub async fn cleanup(force: bool) -> Result<()> {
     Ok(())
 }
 
-async fn cleanup_winget(
-    uninstall: &[(Source, &str)],
+async fn cleanup_lockfile(
+    uninstall: &[(lockfile::Source, &str)],
     lockfile: &Lockfile,
     lockfile_path: &Path,
 ) -> Result<u32> {
-    let mut packages: BTreeMap<_, PackageEntry> = lockfile
+    let mut packages: BTreeMap<_, lockfile::PackageEntry> = lockfile
         .packages
         .iter()
         .map(|x| ((x.source, x.id.as_str()), x.clone()))
@@ -52,17 +52,14 @@ async fn cleanup_winget(
     let installed_packages = winget::list().await?;
     let installed_packages = installed_packages
         .iter()
-        .filter_map(|x| {
-            x.source
-                .map(|source| (bundlefile::Source::from(source), x.id.as_str()))
-        })
+        .filter_map(|x| x.source.map(|source| (source, x.id.as_str())))
         .collect::<HashSet<_>>();
 
     let mut uninstalled = 0;
     for &(source, key) in uninstall {
-        if installed_packages.contains(&(source, key)) {
+        if installed_packages.contains(&(source.into(), key)) {
             println!("Uninstalling {key}...");
-            if let Err(err) = uninstall_package(source, key).await {
+            if let Err(err) = winget::uninstall(source.into(), key).await {
                 eprintln!("\x1b[31m`winget-bundle` failed! {err}\x1b[0m");
                 continue;
             }
@@ -93,11 +90,11 @@ async fn cleanup_scoop(uninstall: &[Vec<&str>]) -> Result<u32> {
 fn lockfile_uninstall_target<'a>(
     lockfile: &'a Lockfile,
     bundlefile: &Bundlefile,
-) -> Vec<(Source, &'a str)> {
+) -> Vec<(lockfile::Source, &'a str)> {
     lockfile
         .packages
         .iter()
-        .filter(|x| !exists_in_bundlefile(bundlefile, x.source, &x.id))
+        .filter(|x| !exists_in_bundlefile(bundlefile, x.source.into(), &x.id))
         .map(|x| (x.source, x.id.as_str()))
         .collect()
 }
@@ -114,7 +111,7 @@ fn scoop_uninstall_target<'a>(
             std::mem::take(&mut packages).into_iter().partition(|x| {
                 scoop::INSTALLATION_HELPERS.contains(&x.name.as_str())
                     || depends.contains(&x.name)
-                    || exists_in_bundlefile(bundlefile, Source::Scoop, &x.name)
+                    || exists_in_bundlefile(bundlefile, bundlefile::Source::Scoop, &x.name)
             });
         if removing.is_empty() {
             break;
@@ -138,17 +135,9 @@ fn print_grid<'a>(items: impl Iterator<Item = &'a str>) {
     print!("{grid}")
 }
 
-fn exists_in_bundlefile(bundlefile: &Bundlefile, source: Source, key: &str) -> bool {
+fn exists_in_bundlefile(bundlefile: &Bundlefile, source: bundlefile::Source, key: &str) -> bool {
     bundlefile
         .entries
         .iter()
         .any(|x| x.source == source && x.id == key)
-}
-
-async fn uninstall_package(source: Source, key: &str) -> Result<()> {
-    match source {
-        Source::Winget => winget::uninstall(winget::Source::Winget, key).await,
-        Source::MsStore => winget::uninstall(winget::Source::MsStore, key).await,
-        Source::Scoop => scoop::uninstall(key).await,
-    }
 }

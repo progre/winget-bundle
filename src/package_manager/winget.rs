@@ -5,7 +5,7 @@ use itertools::Itertools;
 use smol::process::Command;
 
 use crate::{
-    file::bundlefile,
+    file::{bundlefile, lockfile},
     package_manager::table_parser::{ColumnWidthBasis, parse_table},
 };
 
@@ -23,8 +23,9 @@ impl PackageEntry {
         self.version != "Unknown" && self.available.is_some()
     }
 
-    pub fn to_bundlefile_key(&self) -> Option<(bundlefile::Source, &str)> {
-        self.source.map(|source| (source.into(), self.id.as_str()))
+    pub fn to_bundlefile_key(&self) -> Option<bundlefile::CompositeKey<'_>> {
+        self.source
+            .map(|source| bundlefile::CompositeKey::new(source.into(), self.id.as_str()))
     }
 }
 
@@ -39,6 +40,15 @@ impl Source {
         match self {
             Self::Winget => "winget",
             Self::MsStore => "msstore",
+        }
+    }
+}
+
+impl From<lockfile::Source> for Source {
+    fn from(value: lockfile::Source) -> Self {
+        match value {
+            lockfile::Source::Winget => Self::Winget,
+            lockfile::Source::MsStore => Self::MsStore,
         }
     }
 }

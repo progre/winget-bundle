@@ -4,6 +4,7 @@ use pest::iterators::Pair;
 use std::fmt::Display;
 use std::str::FromStr;
 
+use crate::file::lockfile;
 use crate::package_manager::winget;
 
 #[derive(pest_derive::Parser)]
@@ -31,6 +32,12 @@ pub struct PackageEntry {
     pub no_upgrade: bool,
 }
 
+impl PackageEntry {
+    pub fn to_key(&self) -> CompositeKey<'_> {
+        CompositeKey::new(self.source, self.id.as_str())
+    }
+}
+
 impl Display for PackageEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(name) = &self.name {
@@ -38,6 +45,18 @@ impl Display for PackageEntry {
         } else {
             write!(f, "{}", self.id)
         }
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CompositeKey<'a> {
+    pub source: Source,
+    pub id: &'a str,
+}
+
+impl CompositeKey<'_> {
+    pub fn new(source: Source, id: &str) -> CompositeKey<'_> {
+        CompositeKey { source, id }
     }
 }
 
@@ -62,6 +81,15 @@ impl FromStr for Source {
             "msstore" => Ok(Source::MsStore),
             "scoop" => Ok(Source::Scoop),
             _ => bail!("Invalid command: {}", s),
+        }
+    }
+}
+
+impl From<lockfile::Source> for Source {
+    fn from(value: lockfile::Source) -> Self {
+        match value {
+            lockfile::Source::Winget => Source::Winget,
+            lockfile::Source::MsStore => Source::MsStore,
         }
     }
 }

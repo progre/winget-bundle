@@ -3,9 +3,31 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
-use super::bundlefile::Source;
+use crate::file::bundlefile;
+
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
+pub enum Source {
+    #[serde(rename = "winget")]
+    Winget,
+    #[serde(rename = "msstore")]
+    MsStore,
+}
+
+impl TryFrom<bundlefile::Source> for Source {
+    type Error = anyhow::Error;
+
+    fn try_from(value: bundlefile::Source) -> Result<Self> {
+        Ok(match value {
+            bundlefile::Source::Winget => Self::Winget,
+            bundlefile::Source::MsStore => Self::MsStore,
+            bundlefile::Source::Scoop => bail!("Scoop packages cannot be saved in lockfile"),
+        })
+    }
+}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Lockfile {
@@ -24,18 +46,18 @@ impl Lockfile {
     }
 }
 
+impl Display for Lockfile {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let s = toml::to_string(self).map_err(|_| fmt::Error)?;
+        write!(f, "{}", s)
+    }
+}
+
 impl FromStr for Lockfile {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
         toml::from_str(s).map_err(|e| anyhow::anyhow!("failed to parse Bundlefile.lock: {}", e))
-    }
-}
-
-impl Display for Lockfile {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let s = toml::to_string(self).map_err(|_| fmt::Error)?;
-        write!(f, "{}", s)
     }
 }
 
@@ -46,6 +68,12 @@ pub struct PackageEntry {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+impl PackageEntry {
+    pub fn new(source: Source, id: String, name: Option<String>) -> Self {
+        Self { source, id, name }
+    }
 }
 
 impl Display for PackageEntry {
