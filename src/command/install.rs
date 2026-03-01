@@ -2,6 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::Result;
+use futures::try_join;
 
 use crate::command::{load_files, save_lockfile};
 use crate::file::bundlefile;
@@ -9,7 +10,9 @@ use crate::file::lockfile;
 use crate::package_manager::{scoop, winget};
 
 pub async fn install(upgrade: bool) -> Result<()> {
-    let (bundlefile, lockfile, lockfile_path) = load_files().await?;
+    let ((bundlefile, lockfile, lockfile_path), winget_package_list, scoop_package_list) =
+        try_join!(load_files(), winget::list(), scoop::installed_packages())?;
+
     let mut lockfile_packages: BTreeMap<(lockfile::Source, String), lockfile::PackageEntry> =
         lockfile
             .packages
@@ -17,8 +20,6 @@ pub async fn install(upgrade: bool) -> Result<()> {
             .map(|x| ((x.source, x.id.clone()), x.clone()))
             .collect();
 
-    let winget_package_list = winget::list().await?;
-    let scoop_package_list = scoop::installed_packages().await?;
     let (installed_packages, upgradable_packages) = list_packages(
         &winget_package_list,
         &scoop_package_list,

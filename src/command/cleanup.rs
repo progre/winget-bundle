@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
+use futures::try_join;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 use terminal_size::{Width, terminal_size};
 
@@ -12,8 +13,8 @@ use crate::file::lockfile::{self, Lockfile};
 use crate::package_manager::{scoop, winget};
 
 pub async fn cleanup(force: bool) -> Result<()> {
-    let (bundlefile, lockfile, lockfile_path) = load_files().await?;
-    let scoop_installed_packages = scoop::installed_packages().await?;
+    let ((bundlefile, lockfile, lockfile_path), scoop_installed_packages) =
+        try_join!(load_files(), scoop::installed_packages())?;
 
     let lockfile_targets = lockfile_uninstall_target(&lockfile, &bundlefile);
     let scoop_targets = scoop_uninstall_target(&scoop_installed_packages, &bundlefile);

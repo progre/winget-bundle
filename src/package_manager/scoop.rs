@@ -1,6 +1,7 @@
 use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
+use futures::{future::try_join_all, try_join};
 use itertools::Itertools;
 use smol::process::Command;
 
@@ -43,28 +44,28 @@ pub async fn upgrade(name: &str) -> Result<()> {
 
 pub async fn installed_packages() -> Result<Vec<PackageEntry>> {
     exec_silent("update").await?;
-    let list = list().await?;
-    let status = status().await?;
-    let mut vec = Vec::with_capacity(list.len());
-    for [name, installed_version, source, ..] in list {
-        let dependencies = depends(&name)
-            .await?
-            .into_iter()
-            .map(|[_, name]| name)
-            .collect();
-        let latest_version = status
-            .iter()
-            .find(|[n, ..]| n == &name)
-            .map(|[_, _, latest, ..]| latest.to_owned());
-        vec.push(PackageEntry {
-            name,
-            _installed_version: installed_version,
-            _source: source,
-            latest_version,
-            dependencies,
+    let (list, status) = try_join!(list(), status())?;
+    let iter = list
+        .into_iter()
+        .map(|[name, installed_version, source, ..]| async {
+            let dependencies = depends(&name)
+                .await?
+                .into_iter()
+                .map(|[_, name]| name)
+                .collect();
+            let latest_version = status
+                .iter()
+                .find(|[n, ..]| n == &name)
+                .map(|[_, _, latest, ..]| latest.to_owned());
+            Ok::<_, anyhow::Error>(PackageEntry {
+                name,
+                _installed_version: installed_version,
+                _source: source,
+                latest_version,
+                dependencies,
+            })
         });
-    }
-    Ok(vec)
+    try_join_all(iter).await
 }
 
 async fn list() -> Result<Vec<[String; 5]>> {
