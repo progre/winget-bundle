@@ -33,7 +33,7 @@ pub struct PackageEntry {
 }
 
 impl PackageEntry {
-    pub fn to_key(&self) -> CompositeKey<'_> {
+    pub fn as_key(&self) -> CompositeKey<'_> {
         CompositeKey::new(self.source, self.id.as_str())
     }
 }

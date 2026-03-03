@@ -23,7 +23,7 @@ impl PackageEntry {
         self.version != "Unknown" && self.available.is_some()
     }
 
-    pub fn to_bundlefile_key(&self) -> Option<bundlefile::CompositeKey<'_>> {
+    pub fn as_bundlefile_key(&self) -> Option<bundlefile::CompositeKey<'_>> {
         self.source
             .map(|source| bundlefile::CompositeKey::new(source.into(), self.id.as_str()))
     }
