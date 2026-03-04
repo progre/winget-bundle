@@ -13,24 +13,33 @@ use crate::file::lockfile::{self, Lockfile};
 use crate::package_manager::{scoop, winget};
 
 pub async fn cleanup(force: bool) -> Result<()> {
-    let ((bundlefile, lockfile, lockfile_path), scoop_installed_packages) =
-        try_join!(load_files(), scoop::installed_packages())?;
+    let ((bundlefile, lockfile, lockfile_path), winget_package_list, scoop_installed_packages) =
+        try_join!(load_files(), winget::list(), scoop::installed_packages())?;
 
     let lockfile_targets = lockfile_uninstall_target(&lockfile, &bundlefile);
+    let msstore_targets = msstore_uninstall_target(&winget_package_list, &bundlefile);
     let scoop_targets = scoop_uninstall_target(&scoop_installed_packages, &bundlefile);
-    if lockfile_targets.is_empty() && scoop_targets.is_empty() {
+    if lockfile_targets.is_empty() && msstore_targets.is_empty() && scoop_targets.is_empty() {
         return Ok(());
     }
     if !force {
         println!("Would uninstall packages:");
-        let lockfile_targets = lockfile_targets.into_iter().map(|(_, key)| key);
+        let lockfile_targets = lockfile_targets.into_iter().map(|x| x.id.as_str());
+        let msstore_items = msstore_targets.into_iter().map(|x| x.name.as_str());
         let scoop_targets = scoop_targets.into_iter().flat_map(|x| x.into_iter());
-        print_grid(lockfile_targets.chain(scoop_targets));
+        print_grid(lockfile_targets.chain(msstore_items).chain(scoop_targets));
         println!("Run `winget-bundle cleanup --force` to make these changes.");
         return Ok(());
     }
 
-    let mut uninstalled = cleanup_lockfile(&lockfile_targets, &lockfile, &lockfile_path).await?;
+    let mut uninstalled = cleanup_lockfile(
+        &lockfile_targets,
+        &winget_package_list,
+        &lockfile,
+        &lockfile_path,
+    )
+    .await?;
+    uninstalled += cleanup_msstore(&msstore_targets).await?;
     uninstalled += cleanup_scoop(&scoop_targets).await?;
 
     if uninstalled > 0 {
@@ -40,35 +49,53 @@ pub async fn cleanup(force: bool) -> Result<()> {
 }
 
 async fn cleanup_lockfile(
-    uninstall: &[(lockfile::Source, &str)],
+    uninstall: &[&lockfile::PackageEntry],
+    winget_package_list: &[winget::PackageEntry],
     lockfile: &Lockfile,
     lockfile_path: &Path,
 ) -> Result<u32> {
+    let installed_packages: HashSet<(lockfile::Source, &str)> = winget_package_list
+        .iter()
+        .filter_map(|x| {
+            x.source
+                .and_then(|y: winget::Source| y.try_into().ok())
+                .map(|y| (y, x.id.as_str()))
+        })
+        .collect();
+
     let mut packages: BTreeMap<_, lockfile::PackageEntry> = lockfile
         .packages
         .iter()
         .map(|x| ((x.source, x.id.as_str()), x.clone()))
         .collect();
 
-    let installed_packages = winget::list().await?;
-    let installed_packages = installed_packages
-        .iter()
-        .filter_map(|x| x.source.map(|source| (source, x.id.as_str())))
-        .collect::<HashSet<_>>();
-
     let mut uninstalled = 0;
-    for &(source, key) in uninstall {
-        if installed_packages.contains(&(source.into(), key)) {
-            println!("Uninstalling {key}...");
-            if let Err(err) = winget::uninstall(source.into(), key).await {
+    for &entry in uninstall {
+        let key = (entry.source, entry.id.as_str());
+        if installed_packages.contains(&key) {
+            println!("Uninstalling {}...", entry.id);
+            if let Err(err) = winget::uninstall(key.0.into(), key.1).await {
                 eprintln!("\x1b[31m`winget-bundle` failed! {err}\x1b[0m");
                 continue;
             }
             uninstalled += 1;
         }
-        let _ = packages.remove(&(source, key));
-        let lockfile = lockfile::Lockfile::new(packages.clone().into_values().collect());
+        let _ = packages.remove(&key);
+        let lockfile = lockfile::Lockfile::new(packages.values().cloned().collect());
         save_lockfile(&lockfile, lockfile_path).await?;
+    }
+    Ok(uninstalled)
+}
+
+async fn cleanup_msstore(uninstall: &[&winget::PackageEntry]) -> Result<u32> {
+    let mut uninstalled = 0;
+    for entry in uninstall {
+        println!("Uninstalling {}...", entry.name);
+        if let Err(err) = winget::uninstall(winget::Source::MsStore, &entry.id).await {
+            eprintln!("\x1b[31m`winget-bundle` failed! {err}\x1b[0m");
+            continue;
+        }
+        uninstalled += 1;
     }
     Ok(uninstalled)
 }
@@ -91,12 +118,22 @@ async fn cleanup_scoop(uninstall: &[Vec<&str>]) -> Result<u32> {
 fn lockfile_uninstall_target<'a>(
     lockfile: &'a Lockfile,
     bundlefile: &Bundlefile,
-) -> Vec<(lockfile::Source, &'a str)> {
+) -> Vec<&'a lockfile::PackageEntry> {
     lockfile
         .packages
         .iter()
         .filter(|x| !exists_in_bundlefile(bundlefile, x.source.into(), &x.id))
-        .map(|x| (x.source, x.id.as_str()))
+        .collect()
+}
+
+fn msstore_uninstall_target<'a>(
+    winget_package_list: &'a [winget::PackageEntry],
+    bundlefile: &Bundlefile,
+) -> Vec<&'a winget::PackageEntry> {
+    winget_package_list
+        .iter()
+        .filter(|x| x.source == Some(winget::Source::MsStore))
+        .filter(|x| !exists_in_bundlefile(bundlefile, bundlefile::Source::MsStore, &x.id))
         .collect()
 }
 

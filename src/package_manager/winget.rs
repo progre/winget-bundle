@@ -13,7 +13,7 @@ use crate::{
 pub struct PackageEntry {
     pub source: Option<Source>,
     pub id: String,
-    pub _name: String,
+    pub name: String,
     version: String,
     available: Option<String>,
 }
@@ -48,7 +48,6 @@ impl From<lockfile::Source> for Source {
     fn from(value: lockfile::Source) -> Self {
         match value {
             lockfile::Source::Winget => Self::Winget,
-            lockfile::Source::MsStore => Self::MsStore,
         }
     }
 }
@@ -147,7 +146,7 @@ pub async fn list() -> anyhow::Result<Vec<PackageEntry>> {
             PackageEntry {
                 source,
                 id,
-                _name: name,
+                name,
                 version,
                 available,
             }

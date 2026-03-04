@@ -89,7 +89,6 @@ impl From<lockfile::Source> for Source {
     fn from(value: lockfile::Source) -> Self {
         match value {
             lockfile::Source::Winget => Source::Winget,
-            lockfile::Source::MsStore => Source::MsStore,
         }
     }
 }

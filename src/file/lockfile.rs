@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Result, bail};
 
-use crate::file::bundlefile;
+use crate::{file::bundlefile, package_manager::winget};
 
 #[derive(
     Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
@@ -13,8 +13,6 @@ use crate::file::bundlefile;
 pub enum Source {
     #[serde(rename = "winget")]
     Winget,
-    #[serde(rename = "msstore")]
-    MsStore,
 }
 
 impl TryFrom<bundlefile::Source> for Source {
@@ -23,8 +21,25 @@ impl TryFrom<bundlefile::Source> for Source {
     fn try_from(value: bundlefile::Source) -> Result<Self> {
         Ok(match value {
             bundlefile::Source::Winget => Self::Winget,
-            bundlefile::Source::MsStore => Self::MsStore,
-            bundlefile::Source::Scoop => bail!("Scoop packages cannot be saved in lockfile"),
+            bundlefile::Source::MsStore => {
+                bail!("MsStore packages are managed directly via winget, not via lockfile")
+            }
+            bundlefile::Source::Scoop => {
+                bail!("Scoop packages are managed directly via scoop, not via lockfile")
+            }
+        })
+    }
+}
+
+impl TryFrom<winget::Source> for Source {
+    type Error = anyhow::Error;
+
+    fn try_from(value: winget::Source) -> Result<Self> {
+        Ok(match value {
+            winget::Source::Winget => Self::Winget,
+            winget::Source::MsStore => {
+                bail!("MsStore packages are managed directly via winget, not via lockfile")
+            }
         })
     }
 }
