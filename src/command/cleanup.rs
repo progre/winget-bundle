@@ -7,36 +7,36 @@ use term_grid::{Direction, Filling, Grid, GridOptions};
 use terminal_size::{Width, terminal_size};
 
 use super::load_files;
-use crate::command::save_lockfile;
+use crate::command::save_statefile;
 use crate::file::bundlefile::{self, Bundlefile};
-use crate::file::lockfile::{self, Lockfile};
+use crate::file::statefile::{self, Statefile};
 use crate::package_manager::{scoop, winget};
 
 pub async fn cleanup(force: bool) -> Result<()> {
-    let ((bundlefile, lockfile, lockfile_path), winget_package_list, scoop_installed_packages) =
+    let ((bundlefile, statefile, statefile_path), winget_package_list, scoop_installed_packages) =
         try_join!(load_files(), winget::list(), scoop::installed_packages())?;
 
-    let lockfile_targets = lockfile_uninstall_target(&lockfile, &bundlefile);
+    let statefile_targets = statefile_uninstall_target(&statefile, &bundlefile);
     let msstore_targets = msstore_uninstall_target(&winget_package_list, &bundlefile);
     let scoop_targets = scoop_uninstall_target(&scoop_installed_packages, &bundlefile);
-    if lockfile_targets.is_empty() && msstore_targets.is_empty() && scoop_targets.is_empty() {
+    if statefile_targets.is_empty() && msstore_targets.is_empty() && scoop_targets.is_empty() {
         return Ok(());
     }
     if !force {
         println!("Would uninstall packages:");
-        let lockfile_targets = lockfile_targets.into_iter().map(|x| x.id.as_str());
+        let statefile_targets = statefile_targets.into_iter().map(|x| x.id.as_str());
         let msstore_items = msstore_targets.into_iter().map(|x| x.name.as_str());
         let scoop_targets = scoop_targets.into_iter().flat_map(|x| x.into_iter());
-        print_grid(lockfile_targets.chain(msstore_items).chain(scoop_targets));
+        print_grid(statefile_targets.chain(msstore_items).chain(scoop_targets));
         println!("Run `winget-bundle cleanup --force` to make these changes.");
         return Ok(());
     }
 
-    let mut uninstalled = cleanup_lockfile(
-        &lockfile_targets,
+    let mut uninstalled = cleanup_statefile(
+        &statefile_targets,
         &winget_package_list,
-        &lockfile,
-        &lockfile_path,
+        &statefile,
+        &statefile_path,
     )
     .await?;
     uninstalled += cleanup_msstore(&msstore_targets).await?;
@@ -48,13 +48,13 @@ pub async fn cleanup(force: bool) -> Result<()> {
     Ok(())
 }
 
-async fn cleanup_lockfile(
-    uninstall: &[&lockfile::PackageEntry],
+async fn cleanup_statefile(
+    uninstall: &[&statefile::PackageEntry],
     winget_package_list: &[winget::PackageEntry],
-    lockfile: &Lockfile,
-    lockfile_path: &Path,
+    statefile: &Statefile,
+    statefile_path: &Path,
 ) -> Result<u32> {
-    let installed_packages: HashSet<(lockfile::Source, &str)> = winget_package_list
+    let installed_packages: HashSet<(statefile::Source, &str)> = winget_package_list
         .iter()
         .filter_map(|x| {
             x.source
@@ -63,7 +63,7 @@ async fn cleanup_lockfile(
         })
         .collect();
 
-    let mut packages: BTreeMap<_, lockfile::PackageEntry> = lockfile
+    let mut packages: BTreeMap<_, statefile::PackageEntry> = statefile
         .packages
         .iter()
         .map(|x| ((x.source, x.id.as_str()), x.clone()))
@@ -81,8 +81,8 @@ async fn cleanup_lockfile(
             uninstalled += 1;
         }
         let _ = packages.remove(&key);
-        let lockfile = lockfile::Lockfile::new(packages.values().cloned().collect());
-        save_lockfile(&lockfile, lockfile_path).await?;
+        let statefile = Statefile::new(packages.values().cloned().collect());
+        save_statefile(&statefile, statefile_path).await?;
     }
     Ok(uninstalled)
 }
@@ -115,11 +115,11 @@ async fn cleanup_scoop(uninstall: &[Vec<&str>]) -> Result<u32> {
     Ok(uninstalled)
 }
 
-fn lockfile_uninstall_target<'a>(
-    lockfile: &'a Lockfile,
+fn statefile_uninstall_target<'a>(
+    statefile: &'a Statefile,
     bundlefile: &Bundlefile,
-) -> Vec<&'a lockfile::PackageEntry> {
-    lockfile
+) -> Vec<&'a statefile::PackageEntry> {
+    statefile
         .packages
         .iter()
         .filter(|x| !exists_in_bundlefile(bundlefile, x.source.into(), &x.id))

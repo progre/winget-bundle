@@ -5,7 +5,7 @@ use itertools::Itertools;
 use smol::process::Command;
 
 use crate::{
-    file::{bundlefile, lockfile},
+    file::{bundlefile, statefile},
     package_manager::table_parser::{ColumnWidthBasis, parse_table},
 };
 
@@ -44,10 +44,10 @@ impl Source {
     }
 }
 
-impl From<lockfile::Source> for Source {
-    fn from(value: lockfile::Source) -> Self {
+impl From<statefile::Source> for Source {
+    fn from(value: statefile::Source) -> Self {
         match value {
-            lockfile::Source::Winget => Self::Winget,
+            statefile::Source::Winget => Self::Winget,
         }
     }
 }

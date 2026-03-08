@@ -4,17 +4,17 @@ use std::collections::{BTreeMap, HashSet};
 use anyhow::Result;
 use futures::try_join;
 
-use crate::command::{load_files, save_lockfile};
+use crate::command::{load_files, save_statefile};
 use crate::file::bundlefile;
-use crate::file::lockfile;
+use crate::file::statefile::{self, Statefile};
 use crate::package_manager::{scoop, winget};
 
 pub async fn install(upgrade: bool) -> Result<()> {
-    let ((bundlefile, lockfile, lockfile_path), winget_package_list, scoop_package_list) =
+    let ((bundlefile, statefile, statefile_path), winget_package_list, scoop_package_list) =
         try_join!(load_files(), winget::list(), scoop::installed_packages())?;
 
-    let mut lockfile_packages: BTreeMap<(lockfile::Source, String), lockfile::PackageEntry> =
-        lockfile
+    let mut statefile_packages: BTreeMap<(statefile::Source, String), statefile::PackageEntry> =
+        statefile
             .packages
             .iter()
             .map(|x| ((x.source, x.id.clone()), x.clone()))
@@ -36,12 +36,11 @@ pub async fn install(upgrade: bool) -> Result<()> {
             continue;
         }
         if let Ok(source) = entry.source.try_into()
-            && let Entry::Vacant(e) = lockfile_packages.entry((source, entry.id.clone()))
+            && let Entry::Vacant(e) = statefile_packages.entry((source, entry.id.clone()))
         {
-            e.insert(lockfile::PackageEntry::new(source, entry.id, entry.name));
-            let lockfile =
-                lockfile::Lockfile::new(lockfile_packages.clone().into_values().collect());
-            save_lockfile(&lockfile, &lockfile_path).await?;
+            e.insert(statefile::PackageEntry::new(source, entry.id, entry.name));
+            let statefile = Statefile::new(statefile_packages.clone().into_values().collect());
+            save_statefile(&statefile, &statefile_path).await?;
         }
         installed += 1;
     }

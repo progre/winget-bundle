@@ -11,7 +11,7 @@ Declare all your packages in a single `Bundlefile`, then run one command to inst
 
 - **Declarative** — list all packages in one `Bundlefile`
 - **Multi-source** — supports `winget`, `msstore`, and `scoop` sources in a single file
-- **Lock file** — a `Bundlefile.lock` records the installed state of `winget` packages
+- **State file** — a `Bundlefile.state` records the installed state of `winget` packages
 - **Smart upgrade** — upgrades outdated packages automatically; opt out per-package or globally
 - **Cleanup** — uninstalls packages that have been removed from the `Bundlefile` (dry-run by default)
 
@@ -142,12 +142,12 @@ winget-bundle cleanup --help
 
 ---
 
-## Lock File
+## State File
 
-After a successful install, `winget-bundle` writes a `Bundlefile.lock` file next to your `Bundlefile`.  
+After a successful install, `winget-bundle` writes a `Bundlefile.state` file next to your `Bundlefile`.  
 This TOML file records the installed winget packages, and is used by `cleanup` to track what was installed by `winget-bundle`.
 
-> **Note:** `msstore` and `scoop` packages are excluded from the lock file. `msstore` packages are managed directly through winget without version tracking, and `scoop` packages are excluded because `winget-bundle` queries Scoop's own state directly to determine what is installed.
+> **Note:** `msstore` and `scoop` packages are excluded from the state file. `msstore` packages are managed directly through winget without version tracking, and `scoop` packages are excluded because `winget-bundle` queries Scoop's own state directly to determine what is installed.
 
 ---
 

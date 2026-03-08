@@ -1,2 +1,2 @@
 pub mod bundlefile;
-pub mod lockfile;
+pub mod statefile;

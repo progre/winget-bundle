@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::file::lockfile;
+use crate::file::statefile;
 use crate::package_manager::winget;
 
 #[derive(pest_derive::Parser)]
@@ -85,10 +85,10 @@ impl FromStr for Source {
     }
 }
 
-impl From<lockfile::Source> for Source {
-    fn from(value: lockfile::Source) -> Self {
+impl From<statefile::Source> for Source {
+    fn from(value: statefile::Source) -> Self {
         match value {
-            lockfile::Source::Winget => Source::Winget,
+            statefile::Source::Winget => Source::Winget,
         }
     }
 }

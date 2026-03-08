@@ -22,10 +22,10 @@ impl TryFrom<bundlefile::Source> for Source {
         Ok(match value {
             bundlefile::Source::Winget => Self::Winget,
             bundlefile::Source::MsStore => {
-                bail!("MsStore packages are managed directly via winget, not via lockfile")
+                bail!("MsStore packages are managed directly via winget, not via statefile")
             }
             bundlefile::Source::Scoop => {
-                bail!("Scoop packages are managed directly via scoop, not via lockfile")
+                bail!("Scoop packages are managed directly via scoop, not via statefile")
             }
         })
     }
@@ -38,21 +38,21 @@ impl TryFrom<winget::Source> for Source {
         Ok(match value {
             winget::Source::Winget => Self::Winget,
             winget::Source::MsStore => {
-                bail!("MsStore packages are managed directly via winget, not via lockfile")
+                bail!("MsStore packages are managed directly via winget, not via statefile")
             }
         })
     }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct Lockfile {
+pub struct Statefile {
     pub version: u8,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "package")]
     pub packages: Vec<PackageEntry>,
 }
 
-impl Lockfile {
+impl Statefile {
     pub fn new(packages: Vec<PackageEntry>) -> Self {
         Self {
             version: 0,
@@ -61,18 +61,18 @@ impl Lockfile {
     }
 }
 
-impl Display for Lockfile {
+impl Display for Statefile {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let s = toml::to_string(self).map_err(|_| fmt::Error)?;
         write!(f, "{}", s)
     }
 }
 
-impl FromStr for Lockfile {
+impl FromStr for Statefile {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        toml::from_str(s).map_err(|e| anyhow::anyhow!("failed to parse Bundlefile.lock: {}", e))
+        toml::from_str(s).map_err(|e| anyhow::anyhow!("failed to parse Bundlefile.state: {}", e))
     }
 }
 
