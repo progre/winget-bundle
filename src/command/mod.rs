@@ -1,4 +1,5 @@
 mod cleanup;
+mod edit;
 mod install;
 
 use std::io::ErrorKind;
@@ -12,6 +13,7 @@ use crate::file::bundlefile::Bundlefile;
 use crate::file::statefile::Statefile;
 
 pub use cleanup::cleanup;
+pub use edit::edit;
 pub use install::install;
 
 async fn load_files() -> Result<(Bundlefile, Statefile, PathBuf)> {

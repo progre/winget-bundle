@@ -8,7 +8,7 @@ use std::env;
 use anyhow::Result;
 
 use crate::cli::Commands;
-use crate::command::{cleanup, install};
+use crate::command::{cleanup, edit, install};
 
 fn resolve_upgrade(no_upgrade: bool, upgrade: bool) -> bool {
     debug_assert!(!no_upgrade || !upgrade);
@@ -24,22 +24,16 @@ fn resolve_upgrade(no_upgrade: bool, upgrade: bool) -> bool {
 fn main() -> Result<()> {
     smol::block_on(async {
         let cli = cli::parse_cli();
-        match cli.command {
+        if let Err(err) = match cli.command {
             Commands::Install {
                 no_upgrade,
                 upgrade,
-            } => {
-                if let Err(err) = install(resolve_upgrade(no_upgrade, upgrade)).await {
-                    eprintln!("\x1b[31m{err}\x1b[0m");
-                    std::process::exit(1);
-                }
-            }
-            Commands::Cleanup { force } => {
-                if let Err(err) = cleanup(force).await {
-                    eprintln!("\x1b[31m{err}\x1b[0m");
-                    std::process::exit(1);
-                }
-            }
+            } => install(resolve_upgrade(no_upgrade, upgrade)).await,
+            Commands::Cleanup { force } => cleanup(force).await,
+            Commands::Edit => edit(),
+        } {
+            eprintln!("\x1b[31m{err}\x1b[0m");
+            std::process::exit(1);
         }
         Ok(())
     })

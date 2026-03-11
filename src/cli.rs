@@ -45,6 +45,13 @@ set."
         #[arg(short, long)]
         force: bool,
     },
+    #[command(
+        about = "Edit the \x1b[1mBundlefile\x1b[0m in your editor.",
+        long_about = "Edit the \x1b[1mBundlefile\x1b[0m in your editor.
+
+Uses \x1b[1m$env:EDITOR\x1b[0m if set, otherwise opens with the system default application."
+    )]
+    Edit,
 }
 
 pub fn parse_cli() -> Cli {
