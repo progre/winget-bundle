@@ -8,7 +8,7 @@ use std::env;
 use anyhow::Result;
 
 use crate::cli::Commands;
-use crate::command::{cleanup, edit, install};
+use crate::command::{check, cleanup, edit, install};
 
 fn resolve_upgrade(no_upgrade: bool, upgrade: bool) -> bool {
     debug_assert!(!no_upgrade || !upgrade);
@@ -30,6 +30,14 @@ fn main() -> Result<()> {
                 upgrade,
             } => install(resolve_upgrade(no_upgrade, upgrade)).await,
             Commands::Cleanup { force } => cleanup(force).await,
+            Commands::Check {
+                no_upgrade,
+                upgrade,
+            } => match check(resolve_upgrade(no_upgrade, upgrade)).await {
+                Ok(true) => Ok(()),
+                Ok(false) => std::process::exit(1),
+                Err(err) => Err(err),
+            },
             Commands::Edit => edit(),
         } {
             eprintln!("\x1b[31m{err}\x1b[0m");

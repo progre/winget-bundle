@@ -52,6 +52,25 @@ set."
 Uses \x1b[1m$env:EDITOR\x1b[0m if set, otherwise opens with the system default application."
     )]
     Edit,
+    #[command(
+        about = "Check if all dependencies present in the \x1b[1mBundlefile\x1b[0m are installed."
+    )]
+    Check {
+        #[arg(
+            long,
+            conflicts_with = "upgrade",
+            help = "Don't run upgrade on outdated dependencies. Enabled by default if
+\x1b[1m$env:WINGET_BUNDLE_NO_UPGRADE\x1b[0m is set."
+        )]
+        no_upgrade: bool,
+        #[arg(
+            long,
+            conflicts_with = "no_upgrade",
+            help = "Run upgrade on outdated dependencies, even if \x1b[1m$env:WINGET_BUNDLE_NO_UPGRADE\x1b[0m is
+set."
+        )]
+        upgrade: bool,
+    },
 }
 
 pub fn parse_cli() -> Cli {

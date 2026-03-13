@@ -1,3 +1,4 @@
+mod check;
 mod cleanup;
 mod edit;
 mod install;
@@ -12,6 +13,7 @@ use smol::fs;
 use crate::file::bundlefile::Bundlefile;
 use crate::file::statefile::Statefile;
 
+pub use check::check;
 pub use cleanup::cleanup;
 pub use edit::edit;
 pub use install::install;
@@ -30,6 +32,14 @@ async fn load_files() -> Result<(Bundlefile, Statefile, PathBuf)> {
         Err(err) => bail!("failed to read {}: {}", statefile_path.display(), err),
     };
     Ok((bundlefile, statefile, statefile_path))
+}
+
+async fn load_bundle_file() -> Result<Bundlefile> {
+    let bundlefile_path = locate_bundlefile()?;
+    let bundlefile = fs::read_to_string(&bundlefile_path)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to read {}: {}", bundlefile_path.display(), e))?;
+    bundlefile.parse()
 }
 
 fn locate_bundlefile() -> Result<PathBuf> {
