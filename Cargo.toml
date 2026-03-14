@@ -2,6 +2,8 @@
 name = "winget-bundle"
 version = "0.1.0"
 edition = "2024"
+description = "A package manager wrapper for Windows (winget, msstore, and scoop), inspired by Homebrew's bundle subcommand."
+license = "MIT"
 
 [dependencies]
 anyhow = { version = "1.0.102", features = ["backtrace"] }
