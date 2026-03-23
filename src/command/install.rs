@@ -62,10 +62,14 @@ async fn handle_entry(
         Ok(())
     } else if upgradable_packages.contains(&entry.as_key()) {
         println!("\x1b[32mUpgrading {entry}\x1b[0m");
-        upgrade_package(entry).await
+        upgrade_package(entry).await?;
+        println!();
+        Ok(())
     } else {
         println!("\x1b[32mInstalling {entry}\x1b[0m");
-        install_package(entry).await
+        install_package(entry).await?;
+        println!();
+        Ok(())
     }
 }
 
