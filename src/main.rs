@@ -40,7 +40,7 @@ fn main() -> Result<()> {
             },
             Commands::Edit => edit(),
         } {
-            eprintln!("\x1b[31m{err}\x1b[0m");
+            eprintln!("\x1b[31m`winget-bundle` failed! {err:?}\x1b[0m");
             std::process::exit(1);
         }
         Ok(())

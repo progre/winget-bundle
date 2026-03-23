@@ -14,8 +14,7 @@ use crate::{
 /// https://github.com/ScoopInstaller/Scoop/blob/5c896e901fafbe371b39673129120e3c88496a39/lib/depends.ps1#L103
 pub const INSTALLATION_HELPERS: [&str; 4] = ["7zip", "lessmsi", "innounp", "dark"];
 
-const SCOOP_PREFIX: &str =
-    "$Host.UI.RawUI.BufferSize = @{Width=65536; Height=$Host.UI.RawUI.BufferSize.Height}; scoop ";
+const SCOOP_PREFIX: &str = "$Host.UI.RawUI.BufferSize = New-Object System.Management.Automation.Host.Size(32766, $Host.UI.RawUI.BufferSize.Height); scoop ";
 
 #[derive(Clone, Debug)]
 pub struct PackageEntry {
@@ -93,6 +92,9 @@ async fn list() -> Result<Vec<[String; 5]>> {
 
 async fn status() -> Result<Vec<[String; 5]>> {
     let output = exec_output(&["status", "--local"]).await?;
+    if output == "Everything is ok!\n" {
+        return Ok(vec![]);
+    }
     let (column_count, status_cells) = parse_table(output.lines(), ColumnWidthBasis::SeparatorLine)
         .context("Failed to parse scoop status")?;
     const LEN: usize = 5;
