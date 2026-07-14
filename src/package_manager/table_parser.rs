@@ -63,27 +63,48 @@ pub fn parse_table<'a>(
     Ok((header_len, cells))
 }
 
+/// ヘッダー行から `(列名, 列幅)` を得る
+///
+/// `winget list` のヘッダー行は各列名が特定の表示列に揃えられ、次の列名の
+/// 開始位置までスペースで埋められている。データ行も同じ表示列に揃う。
+/// この時列幅は非 ASCII 列名を考慮し `UnicodeWidthChar` で数える。
+/// 最終列の幅は `None`。データ行のパーサは最終列に残り全体を割り当てる。
 fn parse_header(text: &str) -> Vec<(String, Option<NonZero<usize>>)> {
-    let mut columns = Vec::new();
-    let mut start_idx = 0;
-    let mut column_name = None;
-    for (i, c) in text.chars().enumerate() {
-        match column_name.is_some() {
-            false => {
-                if !c.is_ascii_graphic() {
-                    column_name = Some(text.chars().skip(start_idx).take(i - start_idx).collect());
-                }
+    // Pass 1: スペース区切りで列名を切り出しつつ、各列の開始表示列を控える。
+    let mut columns: Vec<(String, usize)> = Vec::new();
+    let mut current_name = String::new();
+    let mut current_start = 0usize;
+    let mut display_col = 0usize;
+    for c in text.chars() {
+        if c == ' ' {
+            if !current_name.is_empty() {
+                columns.push((std::mem::take(&mut current_name), current_start));
             }
-            true => {
-                if c.is_ascii_graphic() {
-                    columns.push((column_name.take().unwrap(), NonZero::new(i - start_idx)));
-                    start_idx = i;
-                }
+        } else {
+            if current_name.is_empty() {
+                current_start = display_col;
             }
+            current_name.push(c);
         }
+        display_col += c.width().unwrap_or(0);
     }
-    columns.push((text.chars().skip(start_idx).collect(), None));
+    if !current_name.is_empty() {
+        columns.push((current_name, current_start));
+    }
+
+    // Pass 2: 各列の幅を「次の列の開始位置 − 自分の開始位置」として算出する。
+    // 最終列は次が無いので幅は `None`。
+    let starts: Vec<usize> = columns.iter().map(|(_, s)| *s).collect();
     columns
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, start))| {
+            let width = starts
+                .get(i + 1)
+                .and_then(|&next| NonZero::new(next - start));
+            (name, width)
+        })
+        .collect()
 }
 
 fn parse_separator_line(line: &str) -> impl Iterator<Item = usize> {
@@ -199,6 +220,36 @@ MSYS2 64bit                                     MSYS2.MSYS2                     
         assert_eq!(cells[32], "20220603");
         assert_eq!(cells[33], "20251213");
         assert_eq!(cells[34], "winget");
+    }
+
+    #[test]
+    fn test_parse_package_entries_winget_ja() {
+        let (column_count, cells) = parse_table(
+            r"名前                                                               ID                                                                                    バージョン           利用可能            ソース
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PowerToys (Preview) x64                                            Microsoft.PowerToys                                                                   0.97.1               0.97.2              winget
+Windows ターミナル                                                 Microsoft.WindowsTerminal                                                             1.23.2021…                               winget
+"
+            .lines(),
+            ColumnWidthBasis::Header,
+        )
+        .unwrap();
+        assert_eq!(column_count, 5);
+        assert_eq!(cells[0], "名前");
+        assert_eq!(cells[1], "ID");
+        assert_eq!(cells[2], "バージョン");
+        assert_eq!(cells[3], "利用可能");
+        assert_eq!(cells[4], "ソース");
+        assert_eq!(cells[5], "PowerToys (Preview) x64");
+        assert_eq!(cells[6], "Microsoft.PowerToys");
+        assert_eq!(cells[7], "0.97.1");
+        assert_eq!(cells[8], "0.97.2");
+        assert_eq!(cells[9], "winget");
+        assert_eq!(cells[10], "Windows ターミナル");
+        assert_eq!(cells[11], "Microsoft.WindowsTerminal");
+        assert_eq!(cells[12], "1.23.2021…");
+        assert_eq!(cells[13], "");
+        assert_eq!(cells[14], "winget");
     }
 
     #[test]
