@@ -1,10 +1,11 @@
+use std::io::{self, Write};
 use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use const_format::formatcp;
 use futures::{future::try_join_all, try_join};
 use itertools::Itertools;
-use smol::process::Command;
+use smol::{io::AsyncReadExt, process::Command};
 
 use crate::{
     file::bundlefile,
@@ -146,14 +147,54 @@ pub async fn uninstall(name: &str) -> Result<()> {
 
 async fn exec(args: &[&str]) -> Result<()> {
     let cmd = format!("{SCOOP_PREFIX}{}", args.join(" "));
-    let status = Command::new("powershell.exe")
+    let mut child = Command::new("powershell.exe")
         .args(["-NonInteractive", "-NoProfile", "-Command", &cmd])
         .env("PSModulePath", "")
-        .status()
-        .await?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let stdout_task = relay(stdout, io::stdout());
+    let stderr_task = relay(stderr, io::stderr());
+    let wait_task = child.status();
+
+    let ((), (), status) = try_join!(stdout_task, stderr_task, wait_task)?;
+
     if !status.success() {
         bail!("Failed to {}", args.join(" "));
     }
+    Ok(())
+}
+
+async fn relay(mut reader: impl AsyncReadExt + Unpin, mut writer: impl Write) -> io::Result<()> {
+    let mut buf = [0u8; 8192];
+
+    loop {
+        let n = reader.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+
+        let mut start = 0;
+        for i in 0..n {
+            if buf[i] == b'\r' {
+                if start < i {
+                    writer.write_all(&buf[start..i])?;
+                }
+                writer.write_all(b"\r\x1b[2K")?;
+                start = i + 1;
+            }
+        }
+        if start < n {
+            writer.write_all(&buf[start..n])?;
+        }
+
+        writer.flush()?;
+    }
+
     Ok(())
 }
 
