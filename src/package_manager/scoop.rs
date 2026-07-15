@@ -47,6 +47,9 @@ pub async fn upgrade(name: &str) -> Result<()> {
 }
 
 pub async fn installed_packages() -> Result<Vec<PackageEntry>> {
+    if !has_scoop().await? {
+        return Ok(vec![]);
+    }
     exec_update_self().await?;
     let (list, status) = try_join!(list(), status())?;
     let iter = list
@@ -70,6 +73,15 @@ pub async fn installed_packages() -> Result<Vec<PackageEntry>> {
             })
         });
     try_join_all(iter).await
+}
+
+async fn has_scoop() -> Result<bool> {
+    let cmd = "Get-Command scoop -ErrorAction Stop > $null";
+    Ok(Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", cmd])
+        .status()
+        .await?
+        .success())
 }
 
 async fn list() -> Result<Vec<[String; 5]>> {
