@@ -1,21 +1,17 @@
-use std::io::{self, Write};
-use std::process::Stdio;
-
 use anyhow::{Context, Result, bail};
-use const_format::formatcp;
 use futures::{future::try_join_all, try_join};
 use itertools::Itertools;
-use smol::{io::AsyncReadExt, process::Command};
 
 use crate::{
     file::bundlefile,
-    package_manager::table_parser::{ColumnWidthBasis, parse_table},
+    package_manager::{
+        powershell::{exec, exec_output, exec_silent, has_cmd},
+        table_parser::{ColumnWidthBasis, parse_table},
+    },
 };
 
 /// https://github.com/ScoopInstaller/Scoop/blob/5c896e901fafbe371b39673129120e3c88496a39/lib/depends.ps1#L103
 pub const INSTALLATION_HELPERS: [&str; 4] = ["7zip", "lessmsi", "innounp", "dark"];
-
-const SCOOP_PREFIX: &str = "$Host.UI.RawUI.BufferSize = New-Object System.Management.Automation.Host.Size(32766, $Host.UI.RawUI.BufferSize.Height); scoop ";
 
 #[derive(Clone, Debug)]
 pub struct PackageEntry {
@@ -38,16 +34,16 @@ impl PackageEntry {
 
 pub async fn install(name: &str) -> Result<()> {
     exec_update_self().await?;
-    exec(&["install", name]).await
+    exec("scoop", &["install", name]).await
 }
 
 pub async fn upgrade(name: &str) -> Result<()> {
     exec_update_self().await?;
-    exec(&["update", name]).await
+    exec("scoop", &["update", name]).await
 }
 
 pub async fn installed_packages() -> Result<Vec<PackageEntry>> {
-    if !has_scoop().await? {
+    if !has_cmd("scoop").await? {
         return Ok(vec![]);
     }
     exec_update_self().await?;
@@ -75,17 +71,8 @@ pub async fn installed_packages() -> Result<Vec<PackageEntry>> {
     try_join_all(iter).await
 }
 
-async fn has_scoop() -> Result<bool> {
-    let cmd = "Get-Command scoop -ErrorAction Stop > $null";
-    Ok(Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", cmd])
-        .status()
-        .await?
-        .success())
-}
-
 async fn list() -> Result<Vec<[String; 5]>> {
-    let output = exec_output(&["list"]).await?;
+    let output = exec_output("scoop", &["list"]).await?;
     let (column_count, list_cells) = parse_table(output.lines(), ColumnWidthBasis::SeparatorLine)
         .context("Failed to parse scoop list")?;
     const LEN: usize = 5;
@@ -104,7 +91,7 @@ async fn list() -> Result<Vec<[String; 5]>> {
 }
 
 async fn status() -> Result<Vec<[String; 5]>> {
-    let output = exec_output(&["status", "--local"]).await?;
+    let output = exec_output("scoop", &["status", "--local"]).await?;
     if output == "Everything is ok!\n" {
         return Ok(vec![]);
     }
@@ -133,7 +120,7 @@ async fn status() -> Result<Vec<[String; 5]>> {
 }
 
 async fn depends(name: &str) -> Result<Vec<[String; 2]>> {
-    let output = exec_output(&["depends", name]).await?;
+    let output = exec_output("scoop", &["depends", name]).await?;
     let (column_count, status_cells) = parse_table(output.lines(), ColumnWidthBasis::SeparatorLine)
         .context("Failed to parse scoop depends")?;
     const LEN: usize = 2;
@@ -154,88 +141,9 @@ async fn depends(name: &str) -> Result<Vec<[String; 2]>> {
 }
 
 pub async fn uninstall(name: &str) -> Result<()> {
-    exec(&["uninstall", name]).await
-}
-
-async fn exec(args: &[&str]) -> Result<()> {
-    let cmd = format!("{SCOOP_PREFIX}{}", args.join(" "));
-    let mut child = Command::new("powershell.exe")
-        .args(["-NonInteractive", "-NoProfile", "-Command", &cmd])
-        .env("PSModulePath", "")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-
-    let stdout_task = relay(stdout, io::stdout());
-    let stderr_task = relay(stderr, io::stderr());
-    let wait_task = child.status();
-
-    let ((), (), status) = try_join!(stdout_task, stderr_task, wait_task)?;
-
-    if !status.success() {
-        bail!("Failed to {}", args.join(" "));
-    }
-    Ok(())
-}
-
-async fn relay(mut reader: impl AsyncReadExt + Unpin, mut writer: impl Write) -> io::Result<()> {
-    let mut buf = [0u8; 8192];
-
-    loop {
-        let n = reader.read(&mut buf).await?;
-        if n == 0 {
-            break;
-        }
-
-        let mut start = 0;
-        for i in 0..n {
-            if buf[i] == b'\r' {
-                if start < i {
-                    writer.write_all(&buf[start..i])?;
-                }
-                writer.write_all(b"\r\x1b[2K")?;
-                start = i + 1;
-            }
-        }
-        if start < n {
-            writer.write_all(&buf[start..n])?;
-        }
-
-        writer.flush()?;
-    }
-
-    Ok(())
+    exec("scoop", &["uninstall", name]).await
 }
 
 async fn exec_update_self() -> Result<()> {
-    exec_silent(formatcp!("{SCOOP_PREFIX}update")).await
-}
-
-async fn exec_silent(cmd: &str) -> Result<()> {
-    let status = Command::new("powershell.exe")
-        .args(["-NonInteractive", "-NoProfile", "-Command", cmd])
-        .env("PSModulePath", "")
-        .stdout(Stdio::null())
-        .status()
-        .await?;
-    if !status.success() {
-        bail!("Failed to {cmd}");
-    }
-    Ok(())
-}
-
-async fn exec_output(args: &[&str]) -> Result<String> {
-    let cmd = format!("{SCOOP_PREFIX}{}", args.join(" "));
-    let output = Command::new("powershell.exe")
-        .args(["-NonInteractive", "-NoProfile", "-Command", &cmd])
-        .env("PSModulePath", "")
-        .output()
-        .await?;
-    if !output.status.success() {
-        bail!("Failed to {}", args.join(" "));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    exec_silent("scoop", &["update"]).await
 }
