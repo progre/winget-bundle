@@ -7,16 +7,16 @@ license = "MIT"
 repository = "https://github.com/progre/winget-bundle"
 
 [dependencies]
-anyhow = { version = "1.0.102", features = ["backtrace"] }
+anyhow = { version = "1.0.103", features = ["backtrace"] }
 clap = { version = "4", features = ["derive"] }
-const_format = "0.2.35"
+const_format = "0.2.36"
 futures = "0.3.32"
-itertools = "0.14.0"
-pest = "2.8.6"
-pest_derive = "2.8.6"
+itertools = "0.15.0"
+pest = "2.8.7"
+pest_derive = "2.8.7"
 serde = { version = "1.0.228", features = ["derive"] }
 smol = "2.0.2"
-terminal_size = "0.4.3"
-toml = "1.0.3"
+terminal_size = "0.4.4"
+toml = "1.1.3"
 unicode-width = "0.2.2"
-uutils_term_grid = "0.7.0"
+uutils_term_grid = "0.8.0"
